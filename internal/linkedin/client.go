@@ -128,7 +128,8 @@ func (c *Client) retryBackoff(attempt int) float64 {
 		attempt = 1
 	}
 	// Exponential backoff: base, 2*base, 4*base...
-	return base * float64(1<<(attempt-1))
+	multiplier := 1 << uint(attempt-1)
+	return base * float64(multiplier)
 }
 
 func isTransientHTTPStatus(status int) bool {
