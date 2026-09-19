@@ -6,9 +6,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"linkedin-jobs/internal/models"
 )
 
 var htmlTagRE = regexp.MustCompile(`<[^>]*>`)
+
+const (
+	DuplicateNew         = "NEW_JOB"
+	DuplicateSameJobID   = "SAME_JOB_ID"
+	DuplicateExact       = "EXACT_DUPLICATE"
+	DuplicateLikelyRepost = "LIKELY_REPOST"
+)
 
 // ContentHash fingerprints a job for LLM-free dedup. It is stable across
 // cosmetic differences (case, whitespace, HTML tags) so a re-fetched or
@@ -56,4 +65,58 @@ func collapseWS(s string) string {
 		}
 	}
 	return b.String()
+}
+
+
+// StructuralHash fingerprints the employer/title/description while deliberately
+// excluding posting timestamps. It is used to recognize a new LinkedIn job ID
+// that republishes the same underlying vacancy.
+func StructuralHash(company, title, description string) string {
+	s := normalize(company) + "\x1f" + normalize(title) + "\x1f" + normalize(description)
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// ClassifyStructuralDuplicate compares a fully fetched candidate with stored
+// jobs. It never deletes the new candidate; it returns a classification and
+// the earlier job ID so the caller can persist provenance.
+func (s *Store) ClassifyStructuralDuplicate(j *models.JobPosting) (classification, duplicateOf string, err error) {
+	if j == nil || j.ID == "" {
+		return DuplicateNew, "", nil
+	}
+	if existing, err := s.Get(j.ID); err != nil {
+		return "", "", err
+	} else if existing != nil {
+		return DuplicateSameJobID, existing.ID, nil
+	}
+
+	hash := j.StructuralHash
+	if hash == "" {
+		hash = StructuralHash(j.Company, j.Title, j.Description)
+	}
+	if hash == "" {
+		return DuplicateNew, "", nil
+	}
+	existing, err := s.FindByStructuralHash(hash, j.ID)
+	if err != nil {
+		return "", "", err
+	}
+	if existing == nil {
+		return DuplicateNew, "", nil
+	}
+
+	incomingDate := postedDateKey(j.PostedAt)
+	existingDate := postedDateKey(existing.PostedAt)
+	if incomingDate != "" && existingDate != "" && incomingDate != existingDate {
+		return DuplicateLikelyRepost, existing.ID, nil
+	}
+	return DuplicateExact, existing.ID, nil
+}
+
+func postedDateKey(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 10 {
+		return s[:10]
+	}
+	return s
 }
