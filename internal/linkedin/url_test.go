@@ -138,7 +138,8 @@ func TestExtractJobMeta_AllFields(t *testing.T) {
 			"addressRegion": "ON",
 			"addressCountry": "CA"
 		}},
-		"description": "We build things."
+		"description": "We build things.",
+		"datePosted": "2026-09-19"
 	}</script>
 	</head><body></body></html>`
 	doc := docFromJSONLD(t, html)
@@ -154,6 +155,9 @@ func TestExtractJobMeta_AllFields(t *testing.T) {
 	}
 	if !strings.Contains(m.Description, "We build things") {
 		t.Errorf("Description=%q", m.Description)
+	}
+	if m.DatePosted != "2026-09-19" {
+		t.Errorf("DatePosted=%q", m.DatePosted)
 	}
 }
 
@@ -220,4 +224,31 @@ func docFromJSONLD(t *testing.T, html string) *goquery.Document {
 		t.Fatal(err)
 	}
 	return d
+}
+
+func TestParseCardCapturesPostedAt(t *testing.T) {
+	html := `<div data-entity-urn="urn:li:jobPosting:12345">
+		<h3 class="base-search-card__title">Sales Executive</h3>
+		<h4 class="base-search-card__subtitle"><a>Acme</a></h4>
+		<span class="job-search-card__location">Jakarta</span>
+		<time datetime="2026-09-19">1 day ago</time>
+		<a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/12345/?trk=test">view</a>
+	</div>`
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := parseCard(doc.Find("div[data-entity-urn]").First())
+	if j == nil {
+		t.Fatal("parseCard returned nil")
+	}
+	if j.PostedAt != "2026-09-19" {
+		t.Errorf("PostedAt=%q", j.PostedAt)
+	}
+	if j.URL != "https://www.linkedin.com/jobs/view/12345/" {
+		t.Errorf("URL=%q", j.URL)
+	}
+	if j.FirstSeen == "" || j.LastSeen == "" || j.ScrapedAt == "" {
+		t.Errorf("collector timestamps missing: %+v", j)
+	}
 }
