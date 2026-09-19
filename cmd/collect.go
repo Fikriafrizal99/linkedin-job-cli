@@ -103,15 +103,50 @@ Examples:
 		defer st.Close()
 
 		persisted := 0
+		exactDuplicates := 0
+		likelyReposts := 0
 		for _, j := range target {
 			j.ContentHash = store.ContentHash(j.Company, j.Title, j.Description, j.ListedAt)
+			j.StructuralHash = store.StructuralHash(j.Company, j.Title, j.Description)
+
+			classification, duplicateOf, err := st.ClassifyStructuralDuplicate(j)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  ! classify %s: %v\n", j.Title, err)
+				classification = store.DuplicateNew
+			}
+			// --force-overwrite may intentionally revisit the same ID. Preserve
+			// its prior structural classification rather than calling itself a
+			// duplicate of itself.
+			if classification == store.DuplicateSameJobID {
+				if existing, getErr := st.Get(j.ID); getErr == nil && existing != nil {
+					classification = existing.DuplicateClassification
+					duplicateOf = existing.DuplicateOfJobID
+				}
+				if classification == "" {
+					classification = store.DuplicateNew
+				}
+			}
+			j.DuplicateClassification = classification
+			j.DuplicateOfJobID = duplicateOf
+
+			switch classification {
+			case store.DuplicateExact:
+				exactDuplicates++
+			case store.DuplicateLikelyRepost:
+				likelyReposts++
+			}
+
 			if err := st.Upsert(j); err != nil {
 				fmt.Fprintf(os.Stderr, "  ! %s: %v\n", j.Title, err)
 				continue
 			}
 			persisted++
 		}
-		fmt.Fprintf(os.Stderr, "Collected %d job(s) into SQLite.\n", persisted)
+		fmt.Fprintf(os.Stderr, "Collected %d job(s) into SQLite", persisted)
+		if exactDuplicates > 0 || likelyReposts > 0 {
+			fmt.Fprintf(os.Stderr, " [%d exact duplicate(s), %d likely repost(s)]", exactDuplicates, likelyReposts)
+		}
+		fmt.Fprintln(os.Stderr, ".")
 
 		if jsonOut {
 			if err := render.AsJSON(os.Stdout, target); err != nil {
