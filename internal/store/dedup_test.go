@@ -66,3 +66,82 @@ func TestIsDuplicateEnriched(t *testing.T) {
 		t.Errorf("missing hash should not be a duplicate")
 	}
 }
+
+func TestStructuralHashIgnoresPostingDate(t *testing.T) {
+	a := StructuralHash("Acme", "Sales Executive", "Sell enterprise software")
+	b := StructuralHash(" acme ", "SALES EXECUTIVE", "Sell  enterprise software")
+	if a != b {
+		t.Fatalf("structural hash should ignore cosmetic differences")
+	}
+}
+
+func TestClassifyStructuralDuplicateExact(t *testing.T) {
+	st := tmpDB(t)
+	first := sampleJob("dup-a")
+	first.Company = "Acme"
+	first.Title = "Sales Executive"
+	first.Description = "Sell enterprise software"
+	first.PostedAt = "2026-09-19T01:00:00Z"
+	first.StructuralHash = StructuralHash(first.Company, first.Title, first.Description)
+	first.DuplicateClassification = DuplicateNew
+	if err := st.Upsert(first); err != nil {
+		t.Fatalf("Upsert first: %v", err)
+	}
+
+	second := sampleJob("dup-b")
+	second.Company = first.Company
+	second.Title = first.Title
+	second.Description = first.Description
+	second.PostedAt = "2026-09-19T09:00:00Z"
+	second.StructuralHash = StructuralHash(second.Company, second.Title, second.Description)
+
+	class, duplicateOf, err := st.ClassifyStructuralDuplicate(second)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
+	}
+	if class != DuplicateExact || duplicateOf != "dup-a" {
+		t.Fatalf("class=%q duplicateOf=%q", class, duplicateOf)
+	}
+}
+
+func TestClassifyStructuralDuplicateLikelyRepost(t *testing.T) {
+	st := tmpDB(t)
+	first := sampleJob("repost-a")
+	first.Company = "Acme"
+	first.Title = "Sales Executive"
+	first.Description = "Sell enterprise software"
+	first.PostedAt = "2026-09-10"
+	first.StructuralHash = StructuralHash(first.Company, first.Title, first.Description)
+	first.DuplicateClassification = DuplicateNew
+	if err := st.Upsert(first); err != nil {
+		t.Fatalf("Upsert first: %v", err)
+	}
+
+	second := sampleJob("repost-b")
+	second.Company = first.Company
+	second.Title = first.Title
+	second.Description = first.Description
+	second.PostedAt = "2026-09-19"
+	second.StructuralHash = StructuralHash(second.Company, second.Title, second.Description)
+
+	class, duplicateOf, err := st.ClassifyStructuralDuplicate(second)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
+	}
+	if class != DuplicateLikelyRepost || duplicateOf != "repost-a" {
+		t.Fatalf("class=%q duplicateOf=%q", class, duplicateOf)
+	}
+}
+
+func TestClassifyStructuralDuplicateNew(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("new-structural")
+	j.StructuralHash = StructuralHash(j.Company, j.Title, "unique description")
+	class, duplicateOf, err := st.ClassifyStructuralDuplicate(j)
+	if err != nil {
+		t.Fatalf("classify: %v", err)
+	}
+	if class != DuplicateNew || duplicateOf != "" {
+		t.Fatalf("class=%q duplicateOf=%q", class, duplicateOf)
+	}
+}
