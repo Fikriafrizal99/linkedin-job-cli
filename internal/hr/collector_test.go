@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"linkedin-jobs/internal/linkedin"
+	"linkedin-jobs/internal/models"
 )
 
 func TestCollectorContactsSalesRole(t *testing.T) {
@@ -110,5 +111,31 @@ func TestBestPeopleCandidateRejectsLinkedInMemberPlaceholder(t *testing.T) {
 	}
 	if _, ok := bestPeopleCandidate(candidates, target, map[string]bool{}); ok {
 		t.Fatal("placeholder profile should not resolve")
+	}
+}
+
+func TestPreserveResolvedContactsKeepsExistingProfile(t *testing.T) {
+	fresh := []models.JobContact{
+		{JobID: "1", Title: "Talent Acquisition / Recruiter", ContactType: ContactTypeTalentAcquisition, Source: "heuristic"},
+	}
+	existing := []models.JobContact{
+		{JobID: "1", Name: "Jane Doe", Title: "Senior Talent Acquisition Partner", ContactType: ContactTypeTalentAcquisition, LinkedInURL: "https://www.linkedin.com/in/jane-doe/", Source: "linkedin_voyager"},
+	}
+	got := PreserveResolvedContacts(fresh, existing)
+	if got[0].Name != "Jane Doe" || got[0].LinkedInURL == "" || got[0].Source != "linkedin_voyager" {
+		t.Fatalf("resolved profile not preserved: %+v", got[0])
+	}
+}
+
+func TestPreserveResolvedContactsFreshResolutionWins(t *testing.T) {
+	fresh := []models.JobContact{
+		{JobID: "1", Name: "New Person", Title: "Talent Acquisition Manager", ContactType: ContactTypeTalentAcquisition, LinkedInURL: "https://www.linkedin.com/in/new/", Source: "linkedin_voyager"},
+	}
+	existing := []models.JobContact{
+		{JobID: "1", Name: "Old Person", Title: "Recruiter", ContactType: ContactTypeTalentAcquisition, LinkedInURL: "https://www.linkedin.com/in/old/", Source: "linkedin_voyager"},
+	}
+	got := PreserveResolvedContacts(fresh, existing)
+	if got[0].Name != "New Person" {
+		t.Fatalf("fresh resolution should win: %+v", got[0])
 	}
 }
