@@ -31,7 +31,7 @@ func Table(w io.Writer, jobs []*models.JobPosting) {
 		fmt.Fprintln(w, "No jobs found.")
 		return
 	}
-	cols := []string{"#", "Score", "Title", "Company", "Location", "Work", "Salary", "Source", "URL"}
+	cols := []string{"#", "Score", "Title", "Company", "Location", "Work", "Salary", "Apply", "Email", "Source", "URL"}
 	widths := make([]int, len(cols))
 	for i, c := range cols {
 		widths[i] = len(c)
@@ -46,6 +46,8 @@ func Table(w io.Writer, jobs []*models.JobPosting) {
 			trunc(orDash(j.Location), 20),
 			workCell(j),
 			trunc(j.SalaryDisplay(), 26),
+			orDash(j.ApplicationMethod),
+			trunc(orDash(j.ApplyEmail), 30),
 			orDash(j.Source),
 			orNA(j.URL),
 		}
