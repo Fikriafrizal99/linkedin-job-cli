@@ -472,32 +472,12 @@ func (c *Client) FetchDetail(j *models.JobPosting) error {
 	}
 
 	app := parser.ExtractApplicationData(j.Description)
-	pageApply := extractApplyControl(doc)
-
-	j.ApplyEmails = app.Emails
-	j.ApplyEmail = app.PrimaryEmail
-
-	// Explicit application email in the employer's description is the strongest
-	// signal. Otherwise prefer LinkedIn's own apply control over prose hints.
-	if app.Method == parser.ApplicationMethodEmail {
-		j.ApplyURL = app.ApplyURL
-		j.ApplicationMethod = app.Method
-		j.ApplicationInstruction = app.Instruction
-	} else if pageApply.Method != parser.ApplicationMethodUnknown {
-		j.ApplyURL = pageApply.URL
-		j.ApplicationMethod = pageApply.Method
-		j.ApplicationInstruction = pageApply.Instruction
-		// If LinkedIn confirms off-site apply but does not expose the destination
-		// anonymously, retain an explicit URL found in the description.
-		if j.ApplyURL == "" && app.Method == parser.ApplicationMethodExternalURL {
-			j.ApplyURL = app.ApplyURL
-			j.ApplicationInstruction = app.Instruction
-		}
-	} else {
-		j.ApplyURL = app.ApplyURL
-		j.ApplicationMethod = app.Method
-		j.ApplicationInstruction = app.Instruction
-	}
+	resolvedApply := resolveApplicationData(app, extractApplyControl(doc))
+	j.ApplyEmails = resolvedApply.Emails
+	j.ApplyEmail = resolvedApply.PrimaryEmail
+	j.ApplyURL = resolvedApply.ApplyURL
+	j.ApplicationMethod = resolvedApply.Method
+	j.ApplicationInstruction = resolvedApply.Instruction
 	if strings.TrimSpace(j.Description) == "" {
 		j.DetailStatus = "DETAIL_INCOMPLETE"
 	} else {
