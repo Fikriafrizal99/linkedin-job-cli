@@ -257,7 +257,12 @@ func (s *Store) Upsert(j *models.JobPosting) error {
 		j.ScrapedAt = now
 	}
 
-	applyEmails, _ := json.Marshal(j.ApplyEmails)
+	applyEmails := ""
+	if len(j.ApplyEmails) > 0 {
+		if b, err := json.Marshal(j.ApplyEmails); err == nil {
+			applyEmails = string(b)
+		}
+	}
 	_, err := s.db.Exec(`
 INSERT INTO jobs (id,title,company,location,url,salary_raw,salary_low,salary_high,
   salary_currency,salary_source,description,summary,remote_type,status,notes,source,listed_at,
@@ -287,7 +292,7 @@ ON CONFLICT(id) DO UPDATE SET
   last_seen=COALESCE(NULLIF(excluded.last_seen,''), jobs.last_seen),
   scraped_at=COALESCE(NULLIF(excluded.scraped_at,''), jobs.scraped_at),
   apply_email=COALESCE(NULLIF(excluded.apply_email,''), jobs.apply_email),
-  apply_emails=CASE WHEN excluded.apply_emails IS NOT NULL AND excluded.apply_emails!='[]' THEN excluded.apply_emails ELSE jobs.apply_emails END,
+  apply_emails=CASE WHEN excluded.apply_emails IS NOT NULL AND excluded.apply_emails!='' AND excluded.apply_emails!='[]' THEN excluded.apply_emails ELSE jobs.apply_emails END,
   apply_url=COALESCE(NULLIF(excluded.apply_url,''), jobs.apply_url),
   application_method=COALESCE(NULLIF(excluded.application_method,''), jobs.application_method),
   application_instruction=COALESCE(NULLIF(excluded.application_instruction,''), jobs.application_instruction),
@@ -298,7 +303,7 @@ ON CONFLICT(id) DO UPDATE SET
 		nullFloat(j.SalaryLow), nullFloat(j.SalaryHigh), j.SalaryCurrency, j.SalarySource,
 		j.Description, j.Summary, j.RemoteType, statusOrDefault(j.Status), j.Notes,
 		j.Source, j.ListedAt, j.SearchedAt, j.FetchedAt, j.PostedAt, boolInt(j.PostedAtEstimated),
-		j.FirstSeen, j.LastSeen, j.ScrapedAt, j.ApplyEmail, string(applyEmails), j.ApplyURL,
+		j.FirstSeen, j.LastSeen, j.ScrapedAt, j.ApplyEmail, applyEmails, j.ApplyURL,
 		j.ApplicationMethod, j.ApplicationInstruction, j.DetailStatus, j.LLMSummary, j.ContentHash)
 	if err != nil {
 		return err
