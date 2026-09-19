@@ -114,6 +114,7 @@ var contactsEnrichCmd = &cobra.Command{
 				}
 			}
 
+			existingContacts, _ := st.ListJobContacts(j.ID)
 			contacts := hr.CollectorContacts(ctx, co)
 			resolved := 0
 			if contactsResolve {
@@ -124,6 +125,7 @@ var contactsEnrichCmd = &cobra.Command{
 					fmt.Fprintf(os.Stderr, "  ~ %s\n", warning)
 				}
 			}
+			contacts = hr.PreserveResolvedContacts(contacts, existingContacts)
 			if err := st.ReplaceJobContacts(j.ID, contacts); err != nil {
 				fmt.Fprintf(os.Stderr, "  ! persist: %v\n", err)
 				failed++
