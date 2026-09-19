@@ -358,3 +358,38 @@ func TestList_OnsiteFilter(t *testing.T) {
 		t.Errorf("remote+onsite OR: want 3 jobs, got %v", jobIDs(got))
 	}
 }
+
+func TestList_EmailFilters(t *testing.T) {
+	st := tmpDB(t)
+
+	withEmail := sampleJob("email1")
+	withEmail.ApplyEmail = "jobs@example.com"
+	withEmail.ApplyEmails = []string{"jobs@example.com"}
+	withEmail.ApplicationMethod = "EMAIL"
+
+	withoutEmail := sampleJob("email2")
+	withoutEmail.ApplicationMethod = "UNKNOWN"
+
+	if err := st.Upsert(withEmail); err != nil {
+		t.Fatalf("Upsert withEmail: %v", err)
+	}
+	if err := st.Upsert(withoutEmail); err != nil {
+		t.Fatalf("Upsert withoutEmail: %v", err)
+	}
+
+	got, err := st.List(Filters{HasEmail: true})
+	if err != nil {
+		t.Fatalf("List HasEmail: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "email1" {
+		t.Fatalf("HasEmail want [email1], got %v", jobIDs(got))
+	}
+
+	got, err = st.List(Filters{NoEmail: true})
+	if err != nil {
+		t.Fatalf("List NoEmail: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "email2" {
+		t.Fatalf("NoEmail want [email2], got %v", jobIDs(got))
+	}
+}
