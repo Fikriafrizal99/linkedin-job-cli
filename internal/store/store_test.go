@@ -40,6 +40,13 @@ func TestOpen_FreshSchema(t *testing.T) {
 	st := tmpDB(t)
 	j := sampleJob("a")
 	j.ContentHash = "hash-a"
+	j.PostedAt = "2026-09-19"
+	j.ApplyEmail = "recruitment@example.com"
+	j.ApplyEmails = []string{"recruitment@example.com", "hr@example.com"}
+	j.ApplyURL = "https://careers.example.com/jobs/1"
+	j.ApplicationMethod = "EMAIL"
+	j.ApplicationInstruction = "Send CV to recruitment@example.com"
+	j.DetailStatus = "EMAIL_FOUND"
 	if err := st.Upsert(j); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
@@ -52,6 +59,18 @@ func TestOpen_FreshSchema(t *testing.T) {
 	}
 	if got.ContentHash != "hash-a" {
 		t.Errorf("content_hash = %q, want hash-a", got.ContentHash)
+	}
+	if got.PostedAt != "2026-09-19" {
+		t.Errorf("posted_at = %q", got.PostedAt)
+	}
+	if got.ApplyEmail != "recruitment@example.com" || len(got.ApplyEmails) != 2 {
+		t.Errorf("application emails not round-tripped: primary=%q all=%v", got.ApplyEmail, got.ApplyEmails)
+	}
+	if got.ApplicationMethod != "EMAIL" || got.ApplyURL == "" || got.DetailStatus != "EMAIL_FOUND" {
+		t.Errorf("collector metadata not round-tripped: method=%q url=%q detail=%q", got.ApplicationMethod, got.ApplyURL, got.DetailStatus)
+	}
+	if got.FirstSeen == "" || got.LastSeen == "" || got.ScrapedAt == "" {
+		t.Errorf("collector timestamps missing: first=%q last=%q scraped=%q", got.FirstSeen, got.LastSeen, got.ScrapedAt)
 	}
 }
 
@@ -173,6 +192,29 @@ func TestUpsert_PreservesEnrichment(t *testing.T) {
 	}
 	if got.RemoteType != "remote" {
 		t.Errorf("remote_type lost on re-Upsert: %q", got.RemoteType)
+	}
+}
+
+func TestTouchSeenPreservesFirstSeen(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("seen1")
+	j.FirstSeen = "2026-09-18T00:00:00Z"
+	j.LastSeen = "2026-09-18T00:00:00Z"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if err := st.TouchSeen("seen1", "2026-09-19T00:00:00Z"); err != nil {
+		t.Fatalf("TouchSeen: %v", err)
+	}
+	got, err := st.Get("seen1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.FirstSeen != "2026-09-18T00:00:00Z" {
+		t.Errorf("first_seen changed: %q", got.FirstSeen)
+	}
+	if got.LastSeen != "2026-09-19T00:00:00Z" {
+		t.Errorf("last_seen=%q", got.LastSeen)
 	}
 }
 
