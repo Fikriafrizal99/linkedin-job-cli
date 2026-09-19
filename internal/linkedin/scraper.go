@@ -446,6 +446,10 @@ func (c *Client) FetchDetail(j *models.JobPosting) error {
 		}
 	}
 
+	// Normalize one final time after all description sources (HTML, JSON-LD,
+	// authenticated API) have had a chance to fill the body.
+	j.Description = cleanHTMLText(j.Description)
+
 	// 3. Salary resolution. Description-body salary is authoritative: it carries
 	// the localized band + currency actually posted by the employer, so it is
 	// marked high-confidence ("description"). A bare "$lo - $hi" range
@@ -468,11 +472,32 @@ func (c *Client) FetchDetail(j *models.JobPosting) error {
 	}
 
 	app := parser.ExtractApplicationData(j.Description)
+	pageApply := extractApplyControl(doc)
+
 	j.ApplyEmails = app.Emails
 	j.ApplyEmail = app.PrimaryEmail
-	j.ApplyURL = app.ApplyURL
-	j.ApplicationMethod = app.Method
-	j.ApplicationInstruction = app.Instruction
+
+	// Explicit application email in the employer's description is the strongest
+	// signal. Otherwise prefer LinkedIn's own apply control over prose hints.
+	if app.Method == parser.ApplicationMethodEmail {
+		j.ApplyURL = app.ApplyURL
+		j.ApplicationMethod = app.Method
+		j.ApplicationInstruction = app.Instruction
+	} else if pageApply.Method != parser.ApplicationMethodUnknown {
+		j.ApplyURL = pageApply.URL
+		j.ApplicationMethod = pageApply.Method
+		j.ApplicationInstruction = pageApply.Instruction
+		// If LinkedIn confirms off-site apply but does not expose the destination
+		// anonymously, retain an explicit URL found in the description.
+		if j.ApplyURL == "" && app.Method == parser.ApplicationMethodExternalURL {
+			j.ApplyURL = app.ApplyURL
+			j.ApplicationInstruction = app.Instruction
+		}
+	} else {
+		j.ApplyURL = app.ApplyURL
+		j.ApplicationMethod = app.Method
+		j.ApplicationInstruction = app.Instruction
+	}
 	if strings.TrimSpace(j.Description) == "" {
 		j.DetailStatus = "DETAIL_INCOMPLETE"
 	} else {
