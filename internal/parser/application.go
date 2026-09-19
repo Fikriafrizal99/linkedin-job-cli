@@ -64,6 +64,15 @@ func ExtractApplicationData(description string) ApplicationData {
 		return out
 	}
 
+	lower := strings.ToLower(d)
+	for _, phrase := range []string{"easy apply", "apply on linkedin", "apply via linkedin"} {
+		if idx := strings.Index(lower, phrase); idx >= 0 {
+			out.Method = ApplicationMethodLinkedIn
+			out.Instruction = surroundingInstruction(d, d[idx:idx+len(phrase)])
+			return out
+		}
+	}
+
 	return out
 }
 
