@@ -478,12 +478,6 @@ func (c *Client) FetchDetail(j *models.JobPosting) error {
 	} else {
 		j.DetailStatus = "DETAIL_COMPLETE"
 	}
-	if j.ApplyEmail != "" {
-		j.DetailStatus = "EMAIL_FOUND"
-	} else if j.ApplyURL != "" {
-		j.DetailStatus = "EXTERNAL_APPLY"
-	}
-
 	now := store.NowISO()
 	j.FetchedAt = now
 	j.ScrapedAt = now
