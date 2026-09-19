@@ -34,11 +34,11 @@ Do these first.
 
 Keep this feature, but outside mandatory collection.
 
-- [ ] Adapt upstream HR contact logic.
-- [ ] Create `job_contacts` persistence.
-- [ ] Normalize contact categories.
-- [ ] Allow enrichment per job or batch.
-- [ ] Keep outreach/send actions out of this repository.
+- [x] Adapt upstream HR contact logic into deterministic, domain-aware collector enrichment.
+- [x] Create `job_contacts` persistence.
+- [x] Normalize contact categories (`TALENT_ACQUISITION`, `HR`, `HIRING_MANAGER`, `DEPARTMENT_LEADER`, `FOUNDER`, etc.).
+- [x] Allow enrichment per job or bounded batch (`contacts enrich`).
+- [x] Keep outreach/send actions out of the collector enrichment path.
 
 ## P3 — Separate Application Engine
 
