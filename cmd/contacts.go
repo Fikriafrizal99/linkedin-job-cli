@@ -19,6 +19,9 @@ var (
 	contactsUnknownOnly bool
 	contactsLimit       int
 	contactsDelay       float64
+	contactsResolve     bool
+	contactsResolveMax  int
+	contactsResolveDelay float64
 )
 
 var contactsCmd = &cobra.Command{
@@ -81,8 +84,11 @@ var contactsEnrichCmd = &cobra.Command{
 			return nil
 		}
 
-		client, err := newClient(false)
+		client, err := newClient(contactsResolve)
 		if err != nil {
+			if contactsResolve {
+				return fmt.Errorf("contact resolution requires a usable LinkedIn session: %w", err)
+			}
 			return err
 		}
 
@@ -109,13 +115,26 @@ var contactsEnrichCmd = &cobra.Command{
 			}
 
 			contacts := hr.CollectorContacts(ctx, co)
+			resolved := 0
+			if contactsResolve {
+				resolution := hr.ResolveCollectorContacts(client, ctx, co, contactsResolveMax, contactsResolveDelay)
+				contacts = resolution.Contacts
+				resolved = resolution.Resolved
+				for _, warning := range resolution.Warnings {
+					fmt.Fprintf(os.Stderr, "  ~ %s\n", warning)
+				}
+			}
 			if err := st.ReplaceJobContacts(j.ID, contacts); err != nil {
 				fmt.Fprintf(os.Stderr, "  ! persist: %v\n", err)
 				failed++
 				continue
 			}
 			enriched++
-			fmt.Fprintf(os.Stderr, "  stored %d contact target(s)\n", len(contacts))
+			if contactsResolve {
+				fmt.Fprintf(os.Stderr, "  stored %d contact target(s), %d resolved profile(s)\n", len(contacts), resolved)
+			} else {
+				fmt.Fprintf(os.Stderr, "  stored %d contact target(s)\n", len(contacts))
+			}
 
 			if i < len(jobs)-1 && contactsDelay > 0 {
 				time.Sleep(time.Duration(contactsDelay * float64(time.Second)))
@@ -173,6 +192,9 @@ func init() {
 	contactsEnrichCmd.Flags().BoolVar(&contactsUnknownOnly, "unknown-only", false, "with --all, only enrich jobs whose application method is UNKNOWN")
 	contactsEnrichCmd.Flags().IntVar(&contactsLimit, "limit", 20, "maximum jobs in a batch enrichment run")
 	contactsEnrichCmd.Flags().Float64Var(&contactsDelay, "delay", 0.8, "seconds to wait between batch jobs")
+	contactsEnrichCmd.Flags().BoolVar(&contactsResolve, "resolve", false, "resolve role targets to actual LinkedIn profiles using your authenticated session")
+	contactsEnrichCmd.Flags().IntVar(&contactsResolveMax, "resolve-max", 5, "maximum people-search results inspected per role target (max 10)")
+	contactsEnrichCmd.Flags().Float64Var(&contactsResolveDelay, "resolve-delay", 1.0, "seconds to wait between role-target people searches")
 
 	contactsCmd.AddCommand(contactsEnrichCmd)
 	contactsCmd.AddCommand(contactsListCmd)
