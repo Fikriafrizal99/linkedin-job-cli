@@ -31,7 +31,15 @@ var tagRE = regexp.MustCompile(`<[^>]*>`)
 // The JSON-LD JobPosting description is HTML-escaped HTML, so entities must be
 // decoded before tags are stripped.
 func cleanHTMLText(s string) string {
-	s = html.UnescapeString(s)
+	// LinkedIn descriptions can arrive double-encoded (e.g. "&amp;amp;").
+	// Decode a few bounded rounds until the text stabilizes.
+	for i := 0; i < 3; i++ {
+		next := html.UnescapeString(s)
+		if next == s {
+			break
+		}
+		s = next
+	}
 	s = tagRE.ReplaceAllString(s, "\n")
 	lines := strings.Split(s, "\n")
 	var b strings.Builder
