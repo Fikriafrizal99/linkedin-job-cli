@@ -71,8 +71,11 @@ type JobPosting struct {
 	// rubric set is user-generated, so there is no fixed column per rubric.
 	RubricScores string `json:"rubric_scores,omitempty"`
 
-	// LLM-free dedup fingerprint.
-	ContentHash string `json:"content_hash,omitempty"`
+	// LLM-free dedup fingerprints and structural duplicate classification.
+	ContentHash             string `json:"content_hash,omitempty"`
+	StructuralHash          string `json:"structural_hash,omitempty"`
+	DuplicateClassification string `json:"duplicate_classification,omitempty"`
+	DuplicateOfJobID        string `json:"duplicate_of_job_id,omitempty"`
 }
 
 // IsEnriched reports whether structured enrichment has run for this job.
