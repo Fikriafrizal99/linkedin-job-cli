@@ -4,25 +4,25 @@
 
 Do these first.
 
-- [ ] Remove mandatory LLM/provider resolution from anonymous collection.
-- [ ] Introduce a collector-only command/path that works without API keys.
-- [ ] Fix anonymous pagination to advance by actual returned-card count.
-- [ ] Fix/verify `posted-within` parameter encoding.
-- [ ] Preserve anonymous search as the normal collection mode.
-- [ ] Fetch full job detail/description for new jobs.
-- [ ] Keep optional authenticated fallback.
-- [ ] Persist collector output to SQLite.
-- [ ] Check LinkedIn job ID before expensive reprocessing.
+- [x] Remove mandatory LLM/provider resolution from the collector path.
+- [x] Introduce a collector-only command/path that works without API keys.
+- [x] Fix anonymous pagination to advance by actual returned-card count.
+- [x] Fix/verify `posted-within` parameter encoding.
+- [x] Preserve anonymous search as the normal collection mode.
+- [x] Fetch full job detail/description for new jobs.
+- [x] Keep optional authenticated fallback.
+- [x] Persist collector output to SQLite.
+- [x] Check LinkedIn job ID before expensive reprocessing.
 
 ## P1 — Application Data Extraction
 
-- [ ] Parse and persist `posted_at`.
+- [x] Parse and persist `posted_at` when an exact date is available.
 - [ ] Add `posted_at_estimated` when derived from relative time.
-- [ ] Add deterministic email extractor.
-- [ ] Support multiple explicit emails.
-- [ ] Add primary `apply_email`.
-- [ ] Detect `EMAIL`, `EXTERNAL_URL`, `LINKEDIN`, and `UNKNOWN`.
-- [ ] Extract explicit application URL/instruction.
+- [x] Add deterministic email extractor.
+- [x] Support multiple explicit emails.
+- [x] Add primary `apply_email`.
+- [x] Detect `EMAIL`, `EXTERNAL_URL`, `LINKEDIN`, and `UNKNOWN`.
+- [x] Extract explicit application URL/instruction.
 - [ ] Improve content fingerprint.
 - [ ] Fix dedup order: check matching content before storing structural duplicates.
 - [ ] Add probable repost classification.
