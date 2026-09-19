@@ -90,7 +90,11 @@ var contactsEnrichCmd = &cobra.Command{
 		failed := 0
 		for i, j := range jobs {
 			fmt.Fprintf(os.Stderr, "[%d/%d] %s @ %s\n", i+1, len(jobs), j.Title, j.Company)
-			ctx, err := client.FetchJobContext(j.URL)
+			jobRef := j.URL
+			if j.ID != "" {
+				jobRef = "https://www.linkedin.com/jobs/view/" + j.ID + "/"
+			}
+			ctx, err := client.FetchJobContext(jobRef)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  ! context: %v\n", err)
 				failed++
