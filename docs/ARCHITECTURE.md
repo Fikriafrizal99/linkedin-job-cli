@@ -302,6 +302,24 @@ detail_status TEXT
 
 JSON text is acceptable for `apply_emails` in V1 if a normalized child table is unnecessary.
 
+Suggested `job_contacts` schema now implemented:
+
+```text
+id INTEGER PRIMARY KEY
+job_id TEXT
+name TEXT
+title TEXT
+contact_type TEXT
+linkedin_url TEXT
+search_url TEXT
+source TEXT
+priority INTEGER
+why TEXT
+created_at TEXT
+```
+
+Role-level enrichment deliberately leaves `name` and `linkedin_url` empty when no concrete person has been verified. `search_url` is a LinkedIn people/company search aid, not a profile URL.
+
 ## Dedup Strategy
 
 ### ID dedup
@@ -406,6 +424,16 @@ Stored Job
 ```
 
 The result is supporting information, not an automated outreach action.
+
+Collector-aligned commands:
+
+```bash
+linkedin-jobs contacts enrich <job_id>
+linkedin-jobs contacts enrich --all --unknown-only --limit 20
+linkedin-jobs contacts list <job_id>
+```
+
+The deterministic collector path does not guess person names. It stores normalized role targets such as Talent Acquisition, Hiring Manager, and Department Leader.
 
 ## External Boundary
 
