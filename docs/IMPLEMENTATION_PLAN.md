@@ -40,6 +40,15 @@ Keep this feature, but outside mandatory collection.
 - [x] Allow enrichment per job or bounded batch (`contacts enrich`).
 - [x] Keep outreach/send actions out of the collector enrichment path.
 
+### P2.1 — Actual Contact Resolution
+
+- [x] Add authenticated, bounded LinkedIn people search scoped by current company.
+- [x] Resolve role targets to concrete `name/title/linkedin_url` when a relevant profile is returned.
+- [x] Reject placeholder/weak role matches instead of guessing.
+- [x] Preserve previously resolved profiles across transient misses or heuristic-only refreshes.
+- [x] Keep resolution opt-in via `contacts enrich --resolve`.
+- [x] Keep messaging/outreach actions out of the collector.
+
 ## P3 — Separate Application Engine
 
 Not part of Collector V1.
