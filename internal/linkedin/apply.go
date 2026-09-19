@@ -82,6 +82,32 @@ func extractApplyControl(doc *goquery.Document) applyControl {
 	return applyControl{Method: parser.ApplicationMethodUnknown}
 }
 
+
+func resolveApplicationData(app parser.ApplicationData, page applyControl) parser.ApplicationData {
+	// Employer-provided email in the description is the strongest signal.
+	if app.Method == parser.ApplicationMethodEmail {
+		return app
+	}
+	if page.Method == "" || page.Method == parser.ApplicationMethodUnknown {
+		return app
+	}
+
+	resolved := app
+	resolved.Method = page.Method
+	resolved.ApplyURL = page.URL
+	resolved.Instruction = page.Instruction
+
+	// Public/off-site controls sometimes prove that apply is external without
+	// exposing the final destination until sign-in. Preserve a deterministic
+	// URL found in the description in that case.
+	if resolved.ApplyURL == "" && page.Method == parser.ApplicationMethodExternalURL &&
+		app.Method == parser.ApplicationMethodExternalURL {
+		resolved.ApplyURL = app.ApplyURL
+		resolved.Instruction = app.Instruction
+	}
+	return resolved
+}
+
 func applyControlText(s *goquery.Selection, fallback string) string {
 	if s == nil || s.Length() == 0 {
 		return fallback
