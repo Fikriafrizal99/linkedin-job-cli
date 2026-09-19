@@ -51,8 +51,9 @@ var (
 	// facetCompanyRE captures the numeric company id behind the
 	// facetCurrentCompany search facet, whether "=" is raw or %-encoded.
 	facetCompanyRE = regexp.MustCompile(`facetCurrentCompany(?:%3D|=)(\d+)`)
-	// viewJobIDRE captures a job id from a /jobs/view/<id>/ path.
-	viewJobIDRE = regexp.MustCompile(`/jobs/view/(\d+)`)
+	// viewJobIDRE captures a job id from both LinkedIn public URL forms:
+	// /jobs/view/<id>/ and /jobs/view/<slug>-<id>.
+	viewJobIDRE = regexp.MustCompile(`/jobs/view/(?:[^/?#]*-)?(\d+)(?:[/?#]|$)`)
 	// applicantsCountRE captures the "N applicants" badge figure.
 	applicantsCountRE = regexp.MustCompile(`(?i)(\d+)\s+applicants?`)
 )
