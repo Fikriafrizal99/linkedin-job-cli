@@ -293,6 +293,9 @@ apply_url TEXT
 application_method TEXT
 application_instruction TEXT
 content_hash TEXT
+structural_hash TEXT
+duplicate_classification TEXT
+duplicate_of_job_id TEXT
 status TEXT
 detail_status TEXT
 ```
