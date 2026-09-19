@@ -77,6 +77,10 @@ Examples:
 			return fmt.Errorf("collect search failed: %w", err)
 		}
 
+		for _, j := range jobs {
+			j.Source = "linkedin"
+		}
+
 		target := jobs
 		if !collectForceOW {
 			target = filterNewIDs(jobs)
