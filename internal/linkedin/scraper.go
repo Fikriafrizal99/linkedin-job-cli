@@ -10,6 +10,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 
 	"linkedin-jobs/internal/models"
+	"linkedin-jobs/internal/parser"
 	"linkedin-jobs/internal/salary"
 	"linkedin-jobs/internal/store"
 )
@@ -308,7 +309,11 @@ func parseCard(s *goquery.Selection) *models.JobPosting {
 	if m == nil {
 		return nil
 	}
-	j := &models.JobPosting{ID: m[1], SearchedAt: store.NowISO(), Source: "search"}
+	now := store.NowISO()
+	j := &models.JobPosting{
+		ID: m[1], SearchedAt: now, Source: "search",
+		FirstSeen: now, LastSeen: now, ScrapedAt: now,
+	}
 	if t := s.Find(".base-search-card__title").First(); t.Length() > 0 {
 		j.Title = strings.TrimSpace(t.Text())
 	}
@@ -322,6 +327,11 @@ func parseCard(s *goquery.Selection) *models.JobPosting {
 	}
 	if loc := s.Find(".job-search-card__location").First(); loc.Length() > 0 {
 		j.Location = strings.TrimSpace(loc.Text())
+	}
+	if tm := s.Find("time").First(); tm.Length() > 0 {
+		if dt, ok := tm.Attr("datetime"); ok {
+			j.PostedAt = strings.TrimSpace(dt)
+		}
 	}
 	if link := s.Find("a.base-card__full-link").First(); link.Length() > 0 {
 		if href, ok := link.Attr("href"); ok {
@@ -398,6 +408,15 @@ func (c *Client) FetchDetail(j *models.JobPosting) error {
 	if j.Location == "" && meta.Location != "" {
 		j.Location = meta.Location
 	}
+	if meta.DatePosted != "" {
+		j.PostedAt = meta.DatePosted
+	} else if j.PostedAt == "" {
+		if tm := doc.Find("time").First(); tm.Length() > 0 {
+			if dt, ok := tm.Attr("datetime"); ok {
+				j.PostedAt = strings.TrimSpace(dt)
+			}
+		}
+	}
 
 	// 2b. LinkedIn's detail page is now a React Server Components SPA: the
 	// initial HTML often omits the description body, and the guest page omits
@@ -448,7 +467,33 @@ func (c *Client) FetchDetail(j *models.JobPosting) error {
 		j.SalarySource = models.SalarySourceBadge
 	}
 
-	j.FetchedAt = store.NowISO()
+	app := parser.ExtractApplicationData(j.Description)
+	j.ApplyEmails = app.Emails
+	j.ApplyEmail = app.PrimaryEmail
+	j.ApplyURL = app.ApplyURL
+	j.ApplicationMethod = app.Method
+	j.ApplicationInstruction = app.Instruction
+	if strings.TrimSpace(j.Description) == "" {
+		j.DetailStatus = "DETAIL_INCOMPLETE"
+	} else {
+		j.DetailStatus = "DETAIL_COMPLETE"
+	}
+	if j.ApplyEmail != "" {
+		j.DetailStatus = "EMAIL_FOUND"
+	} else if j.ApplyURL != "" {
+		j.DetailStatus = "EXTERNAL_APPLY"
+	}
+
+	now := store.NowISO()
+	j.FetchedAt = now
+	j.ScrapedAt = now
+	j.LastSeen = now
+	if j.FirstSeen == "" {
+		j.FirstSeen = j.SearchedAt
+		if j.FirstSeen == "" {
+			j.FirstSeen = now
+		}
+	}
 	return nil
 }
 
@@ -593,6 +638,7 @@ type jobMeta struct {
 	Company     string
 	Location    string
 	Description string
+	DatePosted  string
 }
 
 // extractJobMeta scans JSON-LD <script> blocks for a JobPosting and returns its
@@ -664,7 +710,10 @@ func jobMetaFromMap(o map[string]interface{}) *jobMeta {
 	if d, ok := o["description"].(string); ok {
 		m.Description = cleanHTMLText(d)
 	}
-	if m.Title == "" && m.Company == "" && m.Location == "" && m.Description == "" {
+	if d, ok := o["datePosted"].(string); ok {
+		m.DatePosted = strings.TrimSpace(d)
+	}
+	if m.Title == "" && m.Company == "" && m.Location == "" && m.Description == "" && m.DatePosted == "" {
 		return nil
 	}
 	return m
