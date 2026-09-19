@@ -145,3 +145,12 @@ func TestClassifyStructuralDuplicateNew(t *testing.T) {
 		t.Fatalf("class=%q duplicateOf=%q", class, duplicateOf)
 	}
 }
+
+func TestStructuralHashRequiresCompleteIdentity(t *testing.T) {
+	if got := StructuralHash("Acme", "Sales Executive", ""); got != "" {
+		t.Fatalf("empty description should not produce structural hash: %q", got)
+	}
+	if got := StructuralHash("", "Sales Executive", "Sell enterprise software"); got != "" {
+		t.Fatalf("empty company should not produce structural hash: %q", got)
+	}
+}
