@@ -435,6 +435,32 @@ linkedin-jobs contacts list <job_id>
 
 The deterministic collector path does not guess person names. It stores normalized role targets such as Talent Acquisition, Hiring Manager, and Department Leader.
 
+Optional actual-person resolution is authenticated and bounded:
+
+```text
+role target
+   |
+   v
+LinkedIn people search
+(currentCompany scoped)
+   |
+   v
+role/headline validation
+   |
+   +--> strong match -> name + title + linkedin_url
+   |
+   +--> no strong match -> retain role-level target
+```
+
+Usage:
+
+```bash
+linkedin-jobs contacts enrich <job_id> --resolve
+linkedin-jobs contacts enrich --all --unknown-only --limit 10 --resolve
+```
+
+Resolution requires a valid LinkedIn session. It inspects at most 10 search results per role target, has a configurable delay between role searches, and never sends a message or connection request.
+
 ## External Boundary
 
 The future Application Engine consumes collector data but remains separately deployable.
