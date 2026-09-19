@@ -47,6 +47,12 @@ var contactsEnrichCmd = &cobra.Command{
 		if contactsDelay < 0 {
 			return fmt.Errorf("--delay must be zero or greater")
 		}
+		if contactsResolveMax < 1 || contactsResolveMax > 10 {
+			return fmt.Errorf("--resolve-max must be between 1 and 10")
+		}
+		if contactsResolveDelay < 0 {
+			return fmt.Errorf("--resolve-delay must be zero or greater")
+		}
 
 		st, err := openStore()
 		if err != nil {
@@ -183,6 +189,9 @@ var contactsListCmd = &cobra.Command{
 			}
 			if c.SearchURL != "" {
 				fmt.Fprintf(os.Stdout, "   Search: %s\n", c.SearchURL)
+			}
+			if c.Source != "" {
+				fmt.Fprintf(os.Stdout, "   Source: %s\n", c.Source)
 			}
 		}
 		return nil
