@@ -142,6 +142,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := backfillStructuralMetadata(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
 }
 
@@ -242,6 +246,42 @@ func backfillSalarySource(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// backfillStructuralMetadata prepares databases created before structural
+// duplicate tracking existed. It is idempotent and does not require re-fetching
+// LinkedIn details.
+func backfillStructuralMetadata(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id, COALESCE(company,''), COALESCE(title,''), COALESCE(description,'')
+		FROM jobs WHERE structural_hash IS NULL OR structural_hash=''`)
+	if err != nil {
+		return err
+	}
+	type rec struct{ id, company, title, description string }
+	var pending []rec
+	for rows.Next() {
+		var r rec
+		if err := rows.Scan(&r.id, &r.company, &r.title, &r.description); err != nil {
+			rows.Close()
+			return err
+		}
+		pending = append(pending, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, r := range pending {
+		h := StructuralHash(r.company, r.title, r.description)
+		if _, err := db.Exec(`UPDATE jobs SET structural_hash=?,
+			duplicate_classification=COALESCE(NULLIF(duplicate_classification,''), ?)
+			WHERE id=?`, h, DuplicateNew, r.id); err != nil {
+			return err
+		}
+	}
+	_, err = db.Exec(`UPDATE jobs SET duplicate_classification=?
+		WHERE duplicate_classification IS NULL OR duplicate_classification=''`, DuplicateNew)
+	return err
 }
 
 // Close closes the database.
