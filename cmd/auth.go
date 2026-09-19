@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -93,6 +95,76 @@ func sessionSourceLabel(s string) string {
 	return s
 }
 
+var authImportCmd = &cobra.Command{
+	Use:   "import",
+	Short: "Import a LinkedIn session from stdin (safe for WSL/headless use)",
+	Long: "Import a LinkedIn Cookie header from standard input and store it in the local cookies file with owner-only permissions. The input must contain at least li_at and JSESSIONID. Do not pass the Cookie header as a command-line argument because shell history can retain it.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		info, err := os.Stdin.Stat()
+		if err != nil {
+			return fmt.Errorf("inspect stdin: %w", err)
+		}
+		if info.Mode()&os.ModeCharDevice != 0 {
+			return fmt.Errorf("no session data on stdin; pipe a local Cookie header into linkedin-jobs auth import")
+		}
+
+		reader := bufio.NewReader(io.LimitReader(os.Stdin, 64*1024))
+		data, err := io.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("read stdin: %w", err)
+		}
+		header := normalizeImportedCookieHeader(string(data))
+		if header == "" {
+			return fmt.Errorf("empty session input")
+		}
+		if !cookieHeaderHas(header, "li_at") || !cookieHeaderHas(header, "JSESSIONID") {
+			return fmt.Errorf("session input must include both li_at and JSESSIONID cookies")
+		}
+
+		writePath := cookiesWritePath()
+		if err := auth.WriteCookiesFile(writePath, header); err != nil {
+			return fmt.Errorf("write cookies file: %w", err)
+		}
+		fmt.Printf("Session imported to %s\n", writePath)
+		fmt.Println("Run 'linkedin-jobs auth status' to verify.")
+		return nil
+	},
+}
+
+func normalizeImportedCookieHeader(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.Contains(raw, "\n") {
+		for _, line := range strings.Split(raw, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(strings.ToLower(line), "cookie:") {
+				raw = strings.TrimSpace(line[len("cookie:"):])
+				break
+			}
+		}
+	}
+	if strings.HasPrefix(strings.ToLower(raw), "cookie:") {
+		raw = strings.TrimSpace(raw[len("cookie:"):])
+	}
+	return strings.TrimSpace(strings.TrimSuffix(raw, ";"))
+}
+
+func cookieHeaderHas(header, name string) bool {
+	target := strings.ToLower(strings.TrimSpace(name))
+	for _, part := range strings.Split(header, ";") {
+		p := strings.TrimSpace(part)
+		idx := strings.IndexByte(p, '=')
+		if idx <= 0 {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(p[:idx])) == target && strings.TrimSpace(p[idx+1:]) != "" {
+			return true
+		}
+	}
+	return false
+}
 var authLoginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Capture your LinkedIn session from Chrome or a guided browser login",
@@ -169,5 +241,6 @@ func cookiesWritePath() string {
 func init() {
 	authCmd.AddCommand(authStatusCmd)
 	authCmd.AddCommand(authLoginCmd)
+	authCmd.AddCommand(authImportCmd)
 	rootCmd.AddCommand(authCmd)
 }
