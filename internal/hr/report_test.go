@@ -150,6 +150,8 @@ func TestBaseReport_CompanyURLAndAbout(t *testing.T) {
 func TestResolveJobID(t *testing.T) {
 	cases := map[string]string{
 		"https://www.linkedin.com/jobs/view/4435820129/":                                           "4435820129",
+		"https://id.linkedin.com/jobs/view/industrial-account-executive-saas-at-michael-page-4469119347": "4469119347",
+		"https://id.linkedin.com/jobs/view/field-sales-executive-at-t%C3%BCv-rheinland-group-4468614708":   "4468614708",
 		"https://www.linkedin.com/jobs/search/?currentJobId=4435820129":                            "4435820129",
 		"https://www.linkedin.com/jobs/search/?originToLandingJobPostings=4435820129%2C4435813285": "4435820129",
 		"https://www.linkedin.com/jobs/view/4435820129/?currentJobId=999":                          "4435820129", // path wins
