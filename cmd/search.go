@@ -68,10 +68,6 @@ Examples:
 		if err != nil {
 			die("%v", err)
 		}
-		pages := (searchTop + 24) / 25
-		if pages < 1 {
-			pages = 1
-		}
 		fmt.Fprintf(os.Stderr, "Searching LinkedIn Jobs: %q", keywords)
 		if searchLocation != "" {
 			fmt.Fprintf(os.Stderr, " @ %q", searchLocation)
@@ -88,7 +84,7 @@ Examples:
 			Location:     searchLocation,
 			WorkType:     resolveWorkType(searchRemote, searchHybrid, searchOnsite),
 			PostedWithin: postedWithin,
-			Pages:        pages,
+			MaxJobs:      searchTop,
 		})
 		if err != nil {
 			die("search failed: %v", err)
@@ -176,7 +172,7 @@ func resolveWorkType(remote, hybrid, onsite bool) string {
 // f_TPR query parameter value. Accepts only the form "<N>d" (days), e.g.
 // "1d", "7d", "30d", "365d"; any other shape is rejected with an error so the
 // user gets a clear message instead of a silent no-op. Returns "" when the flag
-// is empty (filter disabled). LinkedIn encodes "past N seconds" as "r<secs>-".
+// is empty (filter disabled). LinkedIn encodes "past N seconds" as "r<secs>".
 func resolvePostedWithin(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -189,7 +185,7 @@ func resolvePostedWithin(s string) (string, error) {
 	if err != nil || n <= 0 {
 		return "", fmt.Errorf(`--posted-within must be a positive number of days (e.g. 7d), got %q`, s)
 	}
-	return "r" + strconv.Itoa(n*86400) + "-", nil
+	return "r" + strconv.Itoa(n*86400), nil
 }
 
 // workTypeLabel produces a human-readable label for the progress message.
