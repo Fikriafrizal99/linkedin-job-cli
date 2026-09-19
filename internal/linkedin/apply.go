@@ -59,6 +59,7 @@ func extractApplyControl(doc *goquery.Document) applyControl {
 
 	// Authenticated/newer UI fallbacks. Require a strong textual or URL signal
 	// so a generic "Apply" button is not mislabeled as Easy Apply.
+	var fallback *goquery.Selection
 	doc.Find(`.jobs-apply-button, [aria-label]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
 		aria, _ := s.Attr("aria-label")
 		href, _ := s.Attr("href")
@@ -66,15 +67,15 @@ func extractApplyControl(doc *goquery.Document) applyControl {
 		if strings.Contains(blob, "easy apply") ||
 			strings.Contains(blob, "linkedin apply") ||
 			strings.Contains(blob, "opensduiapplyflow=true") {
-			b = s
+			fallback = s
 			return false
 		}
 		return true
 	})
-	if b.Length() > 0 {
+	if fallback != nil && fallback.Length() > 0 {
 		return applyControl{
 			Method:      parser.ApplicationMethodLinkedIn,
-			Instruction: applyControlText(b, "LinkedIn Apply"),
+			Instruction: applyControlText(fallback, "LinkedIn Apply"),
 		}
 	}
 
