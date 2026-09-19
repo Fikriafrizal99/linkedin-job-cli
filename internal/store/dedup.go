@@ -72,7 +72,15 @@ func collapseWS(s string) string {
 // excluding posting timestamps. It is used to recognize a new LinkedIn job ID
 // that republishes the same underlying vacancy.
 func StructuralHash(company, title, description string) string {
-	s := normalize(company) + "\x1f" + normalize(title) + "\x1f" + normalize(description)
+	company = normalize(company)
+	title = normalize(title)
+	description = normalize(description)
+	// Structural comparison is only meaningful with a real employer, title,
+	// and fetched description. Avoid collapsing incomplete fetches together.
+	if company == "" || title == "" || description == "" {
+		return ""
+	}
+	s := company + "\x1f" + title + "\x1f" + description
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
