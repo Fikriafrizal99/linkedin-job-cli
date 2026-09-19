@@ -224,6 +224,37 @@ func departmentLeaderFor(blob string) (title, terms string) {
 	}
 }
 
+// PreserveResolvedContacts keeps previously verified concrete profiles when a
+// later enrichment pass only produces role-level fallbacks or a transient
+// people-search miss. Freshly resolved profiles always win.
+func PreserveResolvedContacts(fresh, existing []models.JobContact) []models.JobContact {
+	byType := map[string]models.JobContact{}
+	for _, c := range existing {
+		if c.ContactType == "" || c.Name == "" || c.LinkedInURL == "" {
+			continue
+		}
+		if _, exists := byType[c.ContactType]; !exists {
+			byType[c.ContactType] = c
+		}
+	}
+	for i := range fresh {
+		if fresh[i].Name != "" && fresh[i].LinkedInURL != "" {
+			continue
+		}
+		old, ok := byType[fresh[i].ContactType]
+		if !ok {
+			continue
+		}
+		fresh[i].Name = old.Name
+		fresh[i].LinkedInURL = old.LinkedInURL
+		if old.Title != "" {
+			fresh[i].Title = old.Title
+		}
+		fresh[i].Source = old.Source
+	}
+	return fresh
+}
+
 func containsAny(s string, terms ...string) bool {
 	for _, term := range terms {
 		if strings.Contains(s, term) {
