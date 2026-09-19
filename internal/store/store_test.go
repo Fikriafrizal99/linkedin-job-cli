@@ -40,6 +40,9 @@ func TestOpen_FreshSchema(t *testing.T) {
 	st := tmpDB(t)
 	j := sampleJob("a")
 	j.ContentHash = "hash-a"
+	j.StructuralHash = "struct-a"
+	j.DuplicateClassification = DuplicateLikelyRepost
+	j.DuplicateOfJobID = "older-job"
 	j.PostedAt = "2026-09-19"
 	j.ApplyEmail = "recruitment@example.com"
 	j.ApplyEmails = []string{"recruitment@example.com", "hr@example.com"}
@@ -59,6 +62,9 @@ func TestOpen_FreshSchema(t *testing.T) {
 	}
 	if got.ContentHash != "hash-a" {
 		t.Errorf("content_hash = %q, want hash-a", got.ContentHash)
+	}
+	if got.StructuralHash != "struct-a" || got.DuplicateClassification != DuplicateLikelyRepost || got.DuplicateOfJobID != "older-job" {
+		t.Errorf("structural metadata not round-tripped: hash=%q class=%q of=%q", got.StructuralHash, got.DuplicateClassification, got.DuplicateOfJobID)
 	}
 	if got.PostedAt != "2026-09-19" {
 		t.Errorf("posted_at = %q", got.PostedAt)
