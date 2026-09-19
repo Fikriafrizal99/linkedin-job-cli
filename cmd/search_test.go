@@ -63,10 +63,10 @@ func TestResolvePostedWithin(t *testing.T) {
 	}{
 		{"", "", false},
 		{"   ", "", false},
-		{"1d", "r86400-", false},
-		{"7d", "r604800-", false},
-		{"30d", "r2592000-", false},
-		{"365d", "r31536000-", false},
+		{"1d", "r86400", false},
+		{"7d", "r604800", false},
+		{"30d", "r2592000", false},
+		{"365d", "r31536000", false},
 		{"0d", "", true},     // non-positive
 		{"-3d", "", true},    // negative
 		{"7", "", true},      // missing 'd' suffix
