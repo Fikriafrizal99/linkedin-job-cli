@@ -10,6 +10,7 @@ import (
 
 	"linkedin-jobs/internal/linkedin"
 	"linkedin-jobs/internal/models"
+	"linkedin-jobs/internal/store"
 )
 
 var (
@@ -142,10 +143,15 @@ func filterNewIDs(jobs []*models.JobPosting) []*models.JobPosting {
 		die("lookup failed: %v", err)
 	}
 	var fresh []*models.JobPosting
+	seenAt := store.NowISO()
 	for _, j := range jobs {
-		if !existing[j.ID] {
-			fresh = append(fresh, j)
+		if existing[j.ID] {
+			if err := st.TouchSeen(j.ID, seenAt); err != nil {
+				fmt.Fprintf(os.Stderr, "  ! touch %s: %v\n", j.ID, err)
+			}
+			continue
 		}
+		fresh = append(fresh, j)
 	}
 	fmt.Fprintf(os.Stderr, "Found %d jobs, %d new since last run.\n", len(jobs), len(fresh))
 	return fresh
