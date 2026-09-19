@@ -135,6 +135,12 @@ func Detail(w io.Writer, j *models.JobPosting) {
 	if j.DetailStatus != "" {
 		fmt.Fprintf(w, "Detail:     %s\n", j.DetailStatus)
 	}
+	if j.DuplicateClassification != "" {
+		fmt.Fprintf(w, "Duplicate:  %s\n", j.DuplicateClassification)
+	}
+	if j.DuplicateOfJobID != "" {
+		fmt.Fprintf(w, "Duplicate of:%s\n", " "+j.DuplicateOfJobID)
+	}
 	if j.ListedAt > 0 {
 		fmt.Fprintf(w, "Listed:     %s\n", time.UnixMilli(j.ListedAt).Format("2006-01-02"))
 	}
