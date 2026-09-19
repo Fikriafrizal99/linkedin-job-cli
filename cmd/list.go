@@ -20,6 +20,8 @@ var (
 	listOnsite           bool
 	listStatus           string
 	listSource           string
+	listHasEmail         bool
+	listNoEmail          bool
 	listLimit            int
 	listMinScore         int
 	listSortScore        bool
@@ -29,6 +31,9 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List saved jobs from the local database",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if listHasEmail && listNoEmail {
+			die("--has-email and --no-email cannot be used together")
+		}
 		st, err := openStore()
 		if err != nil {
 			die("failed to open DB: %v", err)
@@ -47,6 +52,8 @@ var listCmd = &cobra.Command{
 			Onsite:            listOnsite,
 			Status:            listStatus,
 			Source:            listSource,
+			HasEmail:          listHasEmail,
+			NoEmail:           listNoEmail,
 			MinScore:          listMinScore,
 			SortByScore:       listSortScore,
 		}
@@ -88,6 +95,8 @@ func init() {
 	listCmd.Flags().BoolVar(&listOnsite, "onsite", false, "only on-site jobs (combine with --remote/--hybrid for OR)")
 	listCmd.Flags().StringVar(&listStatus, "status", "", "filter by status (new/viewed/saved/applied/rejected/filtered)")
 	listCmd.Flags().StringVar(&listSource, "source", "", "filter by source (recommended/search)")
+	listCmd.Flags().BoolVar(&listHasEmail, "has-email", false, "only jobs with an explicit application email")
+	listCmd.Flags().BoolVar(&listNoEmail, "no-email", false, "only jobs without an explicit application email")
 	listCmd.Flags().IntVar(&listLimit, "limit", 50, "max results")
 	listCmd.Flags().IntVar(&listMinScore, "min-score", 0, "only jobs with fit_score >= N")
 	listCmd.Flags().BoolVar(&listSortScore, "sort-score", false, "sort by fit_score descending (default: salary)")
