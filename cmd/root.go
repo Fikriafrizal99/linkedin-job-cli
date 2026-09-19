@@ -33,7 +33,10 @@ Capture it once with:
     linkedin-jobs recommended        # pull your personalized feed
     linkedin-jobs url "<url>"        # score every job on a pasted search URL
 
-Anonymous search works without a session:
+Collector mode works without a session or LLM provider:
+    linkedin-jobs collect "Sales Executive" --location Indonesia --posted-within 7d
+
+The upstream scored search command remains available:
     linkedin-jobs search "Staff Engineer" --location Toronto --remote`,
 	SilenceUsage: true,
 }
