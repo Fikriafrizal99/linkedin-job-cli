@@ -46,7 +46,7 @@ func TestOpen_FreshSchema(t *testing.T) {
 	j.ApplyURL = "https://careers.example.com/jobs/1"
 	j.ApplicationMethod = "EMAIL"
 	j.ApplicationInstruction = "Send CV to recruitment@example.com"
-	j.DetailStatus = "EMAIL_FOUND"
+	j.DetailStatus = "DETAIL_COMPLETE"
 	if err := st.Upsert(j); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestOpen_FreshSchema(t *testing.T) {
 	if got.ApplyEmail != "recruitment@example.com" || len(got.ApplyEmails) != 2 {
 		t.Errorf("application emails not round-tripped: primary=%q all=%v", got.ApplyEmail, got.ApplyEmails)
 	}
-	if got.ApplicationMethod != "EMAIL" || got.ApplyURL == "" || got.DetailStatus != "EMAIL_FOUND" {
+	if got.ApplicationMethod != "EMAIL" || got.ApplyURL == "" || got.DetailStatus != "DETAIL_COMPLETE" {
 		t.Errorf("collector metadata not round-tripped: method=%q url=%q detail=%q", got.ApplicationMethod, got.ApplyURL, got.DetailStatus)
 	}
 	if got.FirstSeen == "" || got.LastSeen == "" || got.ScrapedAt == "" {
