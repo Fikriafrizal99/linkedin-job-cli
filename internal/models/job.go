@@ -31,9 +31,23 @@ type JobPosting struct {
 	Status       string `json:"status,omitempty"`
 	Notes        string `json:"notes,omitempty"`
 	Source       string `json:"source,omitempty"`    // "recommended" | "search"
-	ListedAt     int64  `json:"listed_at,omitempty"` // epoch ms
+	ListedAt     int64  `json:"listed_at,omitempty"` // epoch ms (legacy/upstream)
+	PostedAt     string `json:"posted_at,omitempty"`
+	PostedAtEstimated bool `json:"posted_at_estimated,omitempty"`
 	SearchedAt   string `json:"searched_at,omitempty"`
 	FetchedAt    string `json:"fetched_at,omitempty"`
+	FirstSeen    string `json:"first_seen,omitempty"`
+	LastSeen     string `json:"last_seen,omitempty"`
+	ScrapedAt    string `json:"scraped_at,omitempty"`
+
+	// Collector-owned application metadata extracted deterministically from the
+	// posting. Empty values mean the posting did not explicitly provide them.
+	ApplyEmail             string   `json:"apply_email,omitempty"`
+	ApplyEmails            []string `json:"apply_emails,omitempty"`
+	ApplyURL               string   `json:"apply_url,omitempty"`
+	ApplicationMethod      string   `json:"application_method,omitempty"`
+	ApplicationInstruction string   `json:"application_instruction,omitempty"`
+	DetailStatus           string   `json:"detail_status,omitempty"`
 
 	// Structured enrichment (LLM-extracted). Zero values mean "not enriched."
 	CompanyOverview string `json:"company_overview,omitempty"`
