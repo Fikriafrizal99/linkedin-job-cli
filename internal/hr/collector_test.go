@@ -73,3 +73,42 @@ func TestCollectorContactsDoesNotGuessNames(t *testing.T) {
 		}
 	}
 }
+
+func TestBestPeopleCandidateMatchesRoleAndSkipsUsed(t *testing.T) {
+	target := collectorTarget{Title: "Sales Manager / Hiring Manager", SearchTerms: "Sales Manager"}
+	candidates := []linkedin.PeopleSearchCandidate{
+		{Name: "Wrong Person", Headline: "Finance Manager", ProfileURL: "https://www.linkedin.com/in/wrong/"},
+		{Name: "Right Person", Headline: "Regional Sales Manager", ProfileURL: "https://www.linkedin.com/in/right/"},
+	}
+	best, ok := bestPeopleCandidate(candidates, target, map[string]bool{})
+	if !ok || best.Name != "Right Person" {
+		t.Fatalf("best=%+v ok=%v", best, ok)
+	}
+
+	_, ok = bestPeopleCandidate(candidates, target, map[string]bool{"https://www.linkedin.com/in/right/": true})
+	if ok {
+		t.Fatal("used profile should not be selected again")
+	}
+}
+
+func TestRoleMatchScoreRejectsGenericOnlyMatch(t *testing.T) {
+	if got := roleMatchScore("Finance Manager", "Sales Manager"); got != 0 {
+		t.Fatalf("generic manager-only match should be rejected, got %d", got)
+	}
+	if got := roleMatchScore("Regional Sales Manager", "Sales Manager"); got == 0 {
+		t.Fatal("sales manager should match")
+	}
+	if got := roleMatchScore("Senior Talent Acquisition Partner", "Talent Acquisition"); got == 0 {
+		t.Fatal("talent acquisition should match")
+	}
+}
+
+func TestBestPeopleCandidateRejectsLinkedInMemberPlaceholder(t *testing.T) {
+	target := collectorTarget{Title: "Talent Acquisition / Recruiter", SearchTerms: "Talent Acquisition"}
+	candidates := []linkedin.PeopleSearchCandidate{
+		{Name: "LinkedIn Member", Headline: "Talent Acquisition", ProfileURL: "https://www.linkedin.com/in/hidden/"},
+	}
+	if _, ok := bestPeopleCandidate(candidates, target, map[string]bool{}); ok {
+		t.Fatal("placeholder profile should not resolve")
+	}
+}
