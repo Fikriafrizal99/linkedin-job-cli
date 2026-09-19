@@ -22,11 +22,12 @@ Do these first.
 - [x] Support multiple explicit emails.
 - [x] Add primary `apply_email`.
 - [x] Detect `EMAIL`, `EXTERNAL_URL`, `LINKEDIN`, and `UNKNOWN`.
+- [x] Read LinkedIn detail-page apply controls and unwrap external-apply URLs when exposed.
 - [x] Extract explicit application URL/instruction.
-- [ ] Improve content fingerprint.
-- [ ] Fix dedup order: check matching content before storing structural duplicates.
-- [ ] Add probable repost classification.
-- [ ] Add bounded retry/backoff for 429 and transient 5xx.
+- [x] Add a structural content fingerprint separate from the upstream scoring hash.
+- [x] Classify matching structural content before persisting the new job ID.
+- [x] Add probable repost classification using structural identity + posting-date context.
+- [x] Add bounded retry/backoff for 429 and transient 5xx; do not retry 403.
 - [ ] Add collector integration tests.
 
 ## P2 — HR Contact Enrichment
