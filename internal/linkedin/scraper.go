@@ -20,11 +20,18 @@ var jobIDRE = regexp.MustCompile(`jobPosting:(\d+)`)
 
 // SearchParams holds the filterable parameters for an anonymous job search.
 type SearchParams struct {
-	Keywords      string
-	Location      string
-	WorkType      string // "" | "1"(onsite) | "2"(remote) | "3"(hybrid); comma-separated for OR
-	PostedWithin  string // "" or a LinkedIn f_TPR value, e.g. "r604800-" (past 7 days)
-	Pages         int
+	Keywords     string
+	Location     string
+	WorkType     string // "" | "1"(onsite) | "2"(remote) | "3"(hybrid); comma-separated for OR
+	PostedWithin string // "" or a LinkedIn f_TPR value, e.g. "r604800" (past 7 days)
+
+	// MaxJobs caps unique jobs returned. 0 means no explicit cap.
+	MaxJobs int
+
+	// Pages is retained for backwards compatibility with existing callers.
+	// When > 0, it caps the number of HTTP pages. Pagination itself is adaptive
+	// and advances by the actual number of cards LinkedIn returns.
+	Pages int
 }
 
 // Search runs an anonymous job search and returns parsed job cards (no
@@ -32,8 +39,15 @@ type SearchParams struct {
 func (c *Client) Search(p SearchParams) ([]*models.JobPosting, error) {
 	var out []*models.JobPosting
 	seen := map[string]bool{}
-	for page := 0; page < p.Pages; page++ {
-		start := page * 25
+
+	for start, page := 0, 0; ; page++ {
+		if p.Pages > 0 && page >= p.Pages {
+			break
+		}
+		if p.MaxJobs > 0 && len(out) >= p.MaxJobs {
+			break
+		}
+
 		u := guestSearchURL + "?keywords=" + urlEncode(p.Keywords) + "&location=" + urlEncode(p.Location)
 		if p.WorkType != "" {
 			u += "&f_WT=" + p.WorkType
@@ -44,6 +58,7 @@ func (c *Client) Search(p SearchParams) ([]*models.JobPosting, error) {
 		if start > 0 {
 			u += "&start=" + itoa(start)
 		}
+
 		html, _, status, err := c.get(u, false, nil)
 		if err != nil {
 			return out, err
@@ -51,6 +66,7 @@ func (c *Client) Search(p SearchParams) ([]*models.JobPosting, error) {
 		if status != 200 || strings.TrimSpace(html) == "" {
 			break
 		}
+
 		doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 		if err != nil {
 			return out, err
@@ -59,15 +75,25 @@ func (c *Client) Search(p SearchParams) ([]*models.JobPosting, error) {
 		if cards.Length() == 0 {
 			break
 		}
-		cards.Each(func(_ int, s *goquery.Selection) {
-			j := parseCard(s)
+
+		added := 0
+		cards.EachWithBreak(func(_ int, sel *goquery.Selection) bool {
+			j := parseCard(sel)
 			if j == nil || seen[j.ID] {
-				return
+				return true
 			}
 			seen[j.ID] = true
 			out = append(out, j)
+			added++
+			return p.MaxJobs <= 0 || len(out) < p.MaxJobs
 		})
-		if cards.Length() < 25 {
+
+		// LinkedIn's guest endpoint does not guarantee a fixed page size.
+		// Advance by what it actually returned instead of assuming 25 cards.
+		start += cards.Length()
+
+		// A page with no new IDs means we are repeating/exhausted.
+		if added == 0 {
 			break
 		}
 	}
