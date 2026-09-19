@@ -102,13 +102,34 @@ func choosePrimaryEmail(text string, emails []string) string {
 		if idx < 0 {
 			continue
 		}
-		ctx := contextWindow(lower, idx, len(email), 140)
+
+		// Application instructions normally precede the destination address
+		// ("send your CV to ..."). Looking mostly backwards avoids a generic
+		// info@ address inheriting keywords that actually belong to a later email.
+		start := idx - 160
+		if start < 0 {
+			start = 0
+		}
+		end := idx + len(email)
+		if end > len(lower) {
+			end = len(lower)
+		}
+		ctx := lower[start:end]
 		score := 0
 		for _, kw := range applicationKeywords {
 			if strings.Contains(ctx, kw) {
 				score++
 			}
 		}
+
+		// Prefer role mailboxes commonly used explicitly for applications.
+		local := strings.SplitN(strings.ToLower(email), "@", 2)[0]
+		for _, hint := range []string{"career", "recruit", "talent", "hiring", "job", "apply", "hr"} {
+			if strings.Contains(local, hint) {
+				score += 5
+			}
+		}
+
 		if score > bestScore {
 			bestScore = score
 			best = email
