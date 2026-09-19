@@ -503,6 +503,8 @@ type Filters struct {
 	Onsite            bool
 	Status            string
 	Source            string
+	HasEmail          bool
+	NoEmail           bool
 	MinScore          int  // 0 = no score filter
 	SortByScore       bool // order by fit_score desc instead of salary
 	SortBySearched    bool // order by searched_at desc (newest first); overrides SortByScore
@@ -561,6 +563,12 @@ func (s *Store) List(f Filters) ([]*models.JobPosting, error) {
 	if f.Source != "" {
 		q += ` AND source=?`
 		args = append(args, f.Source)
+	}
+	if f.HasEmail {
+		q += ` AND COALESCE(apply_email,'')!=''`
+	}
+	if f.NoEmail {
+		q += ` AND COALESCE(apply_email,'')=''`
 	}
 	if f.MinScore > 0 {
 		q += ` AND fit_score>=?`
