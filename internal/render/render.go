@@ -118,11 +118,29 @@ func Detail(w io.Writer, j *models.JobPosting) {
 	fmt.Fprintf(w, "Remote:     %s\n", orNA(strings.Title(j.RemoteType)))
 	fmt.Fprintf(w, "Source:     %s\n", orNA(j.Source))
 	fmt.Fprintf(w, "Status:     %s\n", orNA(j.Status))
+	if j.PostedAt != "" {
+		fmt.Fprintf(w, "Posted:     %s\n", j.PostedAt)
+	}
+	if j.ApplicationMethod != "" {
+		fmt.Fprintf(w, "Apply via:  %s\n", j.ApplicationMethod)
+	}
+	if j.ApplyEmail != "" {
+		fmt.Fprintf(w, "Apply email:%s\n", " "+j.ApplyEmail)
+	}
+	if j.ApplyURL != "" {
+		fmt.Fprintf(w, "Apply URL:  %s\n", j.ApplyURL)
+	}
+	if j.DetailStatus != "" {
+		fmt.Fprintf(w, "Detail:     %s\n", j.DetailStatus)
+	}
 	if j.ListedAt > 0 {
 		fmt.Fprintf(w, "Listed:     %s\n", time.UnixMilli(j.ListedAt).Format("2006-01-02"))
 	}
 	fmt.Fprintf(w, "ID:         %s\n", j.ID)
 	fmt.Fprintf(w, "URL:        %s\n", j.URL)
+	if j.ApplicationInstruction != "" {
+		fmt.Fprintf(w, "Instruction:%s\n", " "+j.ApplicationInstruction)
+	}
 	if j.Notes != "" {
 		fmt.Fprintf(w, "Notes:      %s\n", j.Notes)
 	}
