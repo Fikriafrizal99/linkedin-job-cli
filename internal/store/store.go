@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -35,6 +36,17 @@ CREATE TABLE IF NOT EXISTS jobs (
     listed_at INTEGER,
     searched_at TEXT NOT NULL,
     fetched_at TEXT,
+    posted_at TEXT,
+    posted_at_estimated INTEGER DEFAULT 0,
+    first_seen TEXT,
+    last_seen TEXT,
+    scraped_at TEXT,
+    apply_email TEXT,
+    apply_emails TEXT,
+    apply_url TEXT,
+    application_method TEXT,
+    application_instruction TEXT,
+    detail_status TEXT,
     company_overview TEXT,
     industry TEXT,
     tech_stack TEXT,
@@ -83,6 +95,17 @@ var addColumns = []struct {
 	{"salary_source", "TEXT"},
 	{"rubric_scores", "TEXT"},
 	{"short_description", "TEXT"},
+	{"posted_at", "TEXT"},
+	{"posted_at_estimated", "INTEGER DEFAULT 0"},
+	{"first_seen", "TEXT"},
+	{"last_seen", "TEXT"},
+	{"scraped_at", "TEXT"},
+	{"apply_email", "TEXT"},
+	{"apply_emails", "TEXT"},
+	{"apply_url", "TEXT"},
+	{"application_method", "TEXT"},
+	{"application_instruction", "TEXT"},
+	{"detail_status", "TEXT"},
 }
 
 // Store is the SQLite persistence layer.
@@ -154,6 +177,8 @@ func migrate(db *sql.DB) error {
 	for _, idx := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_jobs_content_hash ON jobs(content_hash)`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_fit_score ON jobs(fit_score)`,
+		`CREATE INDEX IF NOT EXISTS idx_jobs_application_method ON jobs(application_method)`,
+		`CREATE INDEX IF NOT EXISTS idx_jobs_apply_email ON jobs(apply_email)`,
 	} {
 		if _, err := db.Exec(idx); err != nil {
 			return err
@@ -218,11 +243,28 @@ func (s *Store) Close() error { return s.db.Close() }
 // Upsert inserts or updates a job, preserving llm_summary/status/notes when
 // the incoming fields are empty.
 func (s *Store) Upsert(j *models.JobPosting) error {
+	now := NowISO()
+	if j.SearchedAt == "" {
+		j.SearchedAt = now
+	}
+	if j.FirstSeen == "" {
+		j.FirstSeen = j.SearchedAt
+	}
+	if j.LastSeen == "" {
+		j.LastSeen = now
+	}
+	if j.ScrapedAt == "" {
+		j.ScrapedAt = now
+	}
+
+	applyEmails, _ := json.Marshal(j.ApplyEmails)
 	_, err := s.db.Exec(`
 INSERT INTO jobs (id,title,company,location,url,salary_raw,salary_low,salary_high,
   salary_currency,salary_source,description,summary,remote_type,status,notes,source,listed_at,
-  searched_at,fetched_at,llm_summary,content_hash)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  searched_at,fetched_at,posted_at,posted_at_estimated,first_seen,last_seen,scraped_at,
+  apply_email,apply_emails,apply_url,application_method,application_instruction,detail_status,
+  llm_summary,content_hash)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   title=excluded.title,
   company=COALESCE(NULLIF(excluded.company,''), jobs.company),
@@ -237,13 +279,27 @@ ON CONFLICT(id) DO UPDATE SET
   remote_type=COALESCE(NULLIF(excluded.remote_type,''), jobs.remote_type),
   source=COALESCE(NULLIF(excluded.source,''), jobs.source),
   listed_at=COALESCE(NULLIF(excluded.listed_at,0), jobs.listed_at),
+  searched_at=excluded.searched_at,
   fetched_at=COALESCE(NULLIF(excluded.fetched_at,''), jobs.fetched_at),
+  posted_at=COALESCE(NULLIF(excluded.posted_at,''), jobs.posted_at),
+  posted_at_estimated=CASE WHEN excluded.posted_at_estimated!=0 THEN excluded.posted_at_estimated ELSE jobs.posted_at_estimated END,
+  first_seen=COALESCE(NULLIF(jobs.first_seen,''), excluded.first_seen),
+  last_seen=COALESCE(NULLIF(excluded.last_seen,''), jobs.last_seen),
+  scraped_at=COALESCE(NULLIF(excluded.scraped_at,''), jobs.scraped_at),
+  apply_email=COALESCE(NULLIF(excluded.apply_email,''), jobs.apply_email),
+  apply_emails=CASE WHEN excluded.apply_emails IS NOT NULL AND excluded.apply_emails!='[]' THEN excluded.apply_emails ELSE jobs.apply_emails END,
+  apply_url=COALESCE(NULLIF(excluded.apply_url,''), jobs.apply_url),
+  application_method=COALESCE(NULLIF(excluded.application_method,''), jobs.application_method),
+  application_instruction=COALESCE(NULLIF(excluded.application_instruction,''), jobs.application_instruction),
+  detail_status=COALESCE(NULLIF(excluded.detail_status,''), jobs.detail_status),
   llm_summary=COALESCE(NULLIF(excluded.llm_summary,''), jobs.llm_summary),
   content_hash=COALESCE(NULLIF(excluded.content_hash,''), jobs.content_hash)`,
 		j.ID, j.Title, j.Company, j.Location, j.URL, j.SalaryRaw,
 		nullFloat(j.SalaryLow), nullFloat(j.SalaryHigh), j.SalaryCurrency, j.SalarySource,
 		j.Description, j.Summary, j.RemoteType, statusOrDefault(j.Status), j.Notes,
-		j.Source, j.ListedAt, j.SearchedAt, j.FetchedAt, j.LLMSummary, j.ContentHash)
+		j.Source, j.ListedAt, j.SearchedAt, j.FetchedAt, j.PostedAt, boolInt(j.PostedAtEstimated),
+		j.FirstSeen, j.LastSeen, j.ScrapedAt, j.ApplyEmail, string(applyEmails), j.ApplyURL,
+		j.ApplicationMethod, j.ApplicationInstruction, j.DetailStatus, j.LLMSummary, j.ContentHash)
 	if err != nil {
 		return err
 	}
@@ -368,6 +424,16 @@ func (s *Store) MarkViewed(id string) error {
 func (s *Store) SetFetchedTimes(id, searchedAt, fetchedAt string) error {
 	_, err := s.db.Exec(`UPDATE jobs SET searched_at=?, fetched_at=COALESCE(NULLIF(?, ''), fetched_at) WHERE id=?`,
 		searchedAt, fetchedAt, id)
+	return err
+}
+
+// TouchSeen records that an already-known LinkedIn job appeared in a new
+// collection run without forcing an expensive detail re-fetch.
+func (s *Store) TouchSeen(id, seenAt string) error {
+	if seenAt == "" {
+		seenAt = NowISO()
+	}
+	_, err := s.db.Exec(`UPDATE jobs SET last_seen=?, searched_at=? WHERE id=?`, seenAt, seenAt, id)
 	return err
 }
 
@@ -523,7 +589,9 @@ func (s *Store) List(f Filters) ([]*models.JobPosting, error) {
 func (s *Store) SearchFTS(expr string, limit int) ([]*models.JobPosting, error) {
 	q := `SELECT j.id,j.title,j.company,j.location,j.url,j.salary_raw,j.salary_low,j.salary_high,
   j.salary_currency,j.salary_source,j.description,j.short_description,j.summary,j.llm_summary,j.remote_type,j.status,j.notes,j.source,j.listed_at,
-  j.searched_at,j.fetched_at,j.company_overview,j.industry,j.tech_stack,j.seniority,j.employment_type,
+  j.searched_at,j.fetched_at,j.posted_at,j.posted_at_estimated,j.first_seen,j.last_seen,j.scraped_at,
+  j.apply_email,j.apply_emails,j.apply_url,j.application_method,j.application_instruction,j.detail_status,
+  j.company_overview,j.industry,j.tech_stack,j.seniority,j.employment_type,
   j.years_experience,j.company_size_band,j.company_stage,j.is_founding_role,j.fit_score,
   j.fit_reason,j.content_hash,j.enriched_at,j.scored_at,
   j.rubric_scores FROM jobs j JOIN (SELECT id, rank FROM jobs_fts WHERE jobs_fts MATCH ?`
@@ -670,7 +738,9 @@ func (s *Store) Delete(id string) error {
 
 const jobCols = `SELECT id,title,company,location,url,salary_raw,salary_low,salary_high,
   salary_currency,salary_source,description,short_description,summary,llm_summary,remote_type,status,notes,source,listed_at,
-  searched_at,fetched_at,company_overview,industry,tech_stack,seniority,employment_type,
+  searched_at,fetched_at,posted_at,posted_at_estimated,first_seen,last_seen,scraped_at,
+  apply_email,apply_emails,apply_url,application_method,application_instruction,detail_status,
+  company_overview,industry,tech_stack,seniority,employment_type,
   years_experience,company_size_band,company_stage,is_founding_role,fit_score,
   fit_reason,content_hash,enriched_at,scored_at,
   rubric_scores`
@@ -683,12 +753,15 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 	j := &models.JobPosting{}
 	var sl, sh sql.NullFloat64
 	var company, location, salaryRaw, cur, salarySource, desc, shortDesc, summary, llm, remote, status, notes, source, fetched sql.NullString
-	var listed sql.NullInt64
+	var postedAt, firstSeen, lastSeen, scrapedAt, applyEmail, applyEmails, applyURL, applicationMethod, applicationInstruction, detailStatus sql.NullString
+	var listed, postedAtEstimated sql.NullInt64
 	var companyOverview, industry, techStack, seniority, employmentType, companySizeBand, companyStage, fitReason, contentHash, enrichedAt, scoredAt sql.NullString
 	var rubricScores sql.NullString
 	var yearsExp, isFounding, fitScore sql.NullInt64
 	if err := row.Scan(&j.ID, &j.Title, &company, &location, &j.URL, &salaryRaw, &sl, &sh,
 		&cur, &salarySource, &desc, &shortDesc, &summary, &llm, &remote, &status, &notes, &source, &listed, &j.SearchedAt, &fetched,
+		&postedAt, &postedAtEstimated, &firstSeen, &lastSeen, &scrapedAt,
+		&applyEmail, &applyEmails, &applyURL, &applicationMethod, &applicationInstruction, &detailStatus,
 		&companyOverview, &industry, &techStack, &seniority, &employmentType, &yearsExp,
 		&companySizeBand, &companyStage, &isFounding, &fitScore,
 		&fitReason, &contentHash, &enrichedAt, &scoredAt,
@@ -721,6 +794,19 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 	j.Source = source.String
 	j.ListedAt = listed.Int64
 	j.FetchedAt = fetched.String
+	j.PostedAt = postedAt.String
+	j.PostedAtEstimated = postedAtEstimated.Valid && postedAtEstimated.Int64 != 0
+	j.FirstSeen = firstSeen.String
+	j.LastSeen = lastSeen.String
+	j.ScrapedAt = scrapedAt.String
+	j.ApplyEmail = applyEmail.String
+	if applyEmails.String != "" {
+		_ = json.Unmarshal([]byte(applyEmails.String), &j.ApplyEmails)
+	}
+	j.ApplyURL = applyURL.String
+	j.ApplicationMethod = applicationMethod.String
+	j.ApplicationInstruction = applicationInstruction.String
+	j.DetailStatus = detailStatus.String
 	if j.Status == "" {
 		j.Status = "new"
 	}
@@ -758,6 +844,13 @@ func scanJobs(rows *sql.Rows) ([]*models.JobPosting, error) {
 		out = append(out, j)
 	}
 	return out, rows.Err()
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func nullFloat(p *float64) interface{} {
