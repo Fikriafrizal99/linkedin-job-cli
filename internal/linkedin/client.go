@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,37 +42,129 @@ func (c *Client) HasSession() bool { return c.session != nil && c.session.Cookie
 var ErrAuthRequired = errors.New("authenticated call requires a LinkedIn session: run `linkedin-jobs auth login` to capture one")
 
 // get fetches a URL with browser-like headers, optionally authenticated.
-func (c *Client) get(url string, authenticated bool, extra http.Header) (string, http.Header, int, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return "", nil, 0, err
+func (c *Client) get(rawURL string, authenticated bool, extra http.Header) (string, http.Header, int, error) {
+	maxAttempts := c.cfg.HTTPMaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
 	}
-	req.Header.Set("User-Agent", c.cfg.UserAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	if extra != nil {
-		for k, vs := range extra {
-			for _, v := range vs {
-				req.Header.Set(k, v)
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+		if err != nil {
+			return "", nil, 0, err
+		}
+		req.Header.Set("User-Agent", c.cfg.UserAgent)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		if extra != nil {
+			for k, vs := range extra {
+				for _, v := range vs {
+					req.Header.Set(k, v)
+				}
 			}
 		}
-	}
-	if authenticated {
-		if !c.HasSession() {
-			return "", nil, 0, ErrAuthRequired
+		if authenticated {
+			if !c.HasSession() {
+				return "", nil, 0, ErrAuthRequired
+			}
+			req.Header.Set("Cookie", c.session.CookieHeader)
 		}
-		req.Header.Set("Cookie", c.session.CookieHeader)
+
+		resp, err := c.http.Do(req)
+		if err != nil {
+			lastErr = err
+			if attempt < maxAttempts {
+				sleep(c.retryBackoff(attempt))
+				continue
+			}
+			return "", nil, 0, err
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			if attempt < maxAttempts {
+				sleep(c.retryBackoff(attempt))
+				continue
+			}
+			return "", resp.Header, resp.StatusCode, readErr
+		}
+
+		status := resp.StatusCode
+		if status == http.StatusForbidden {
+			// Treat 403 as a hard block for this request; retrying immediately only
+			// increases pressure and is unlikely to change the outcome.
+			return string(body), resp.Header, status, nil
+		}
+
+		if status == http.StatusTooManyRequests && attempt < maxAttempts {
+			if d, ok := retryAfterSeconds(resp.Header.Get("Retry-After")); ok {
+				sleep(d)
+			} else {
+				sleep(c.retryBackoff(attempt))
+			}
+			continue
+		}
+
+		if isTransientHTTPStatus(status) && attempt < maxAttempts {
+			sleep(c.retryBackoff(attempt))
+			continue
+		}
+
+		return string(body), resp.Header, status, nil
 	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return "", nil, 0, err
+
+	return "", nil, 0, lastErr
+}
+
+func (c *Client) retryBackoff(attempt int) float64 {
+	base := c.cfg.HTTPRetryBaseSeconds
+	if base < 0 {
+		base = 0
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", nil, resp.StatusCode, err
+	if attempt < 1 {
+		attempt = 1
 	}
-	return string(body), resp.Header, resp.StatusCode, nil
+	// Exponential backoff: base, 2*base, 4*base...
+	return base * float64(1<<(attempt-1))
+}
+
+func isTransientHTTPStatus(status int) bool {
+	switch status {
+	case http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+func retryAfterSeconds(raw string) (float64, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.Atoi(raw); err == nil && seconds >= 0 {
+		if seconds > 60 {
+			seconds = 60
+		}
+		return float64(seconds), true
+	}
+	if when, err := http.ParseTime(raw); err == nil {
+		d := time.Until(when)
+		if d < 0 {
+			d = 0
+		}
+		if d > 60*time.Second {
+			d = 60 * time.Second
+		}
+		return d.Seconds(), true
+	}
+	return 0, false
 }
 
 // getJSON is like get but sets an application/json accept header.
