@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     fit_score INTEGER,
     fit_reason TEXT,
     content_hash TEXT,
+    structural_hash TEXT,
+    duplicate_classification TEXT,
+    duplicate_of_job_id TEXT,
     enriched_at TEXT,
     scored_at TEXT,
     rubric_scores TEXT
@@ -90,6 +93,9 @@ var addColumns = []struct {
 	{"fit_score", "INTEGER"},
 	{"fit_reason", "TEXT"},
 	{"content_hash", "TEXT"},
+	{"structural_hash", "TEXT"},
+	{"duplicate_classification", "TEXT"},
+	{"duplicate_of_job_id", "TEXT"},
 	{"enriched_at", "TEXT"},
 	{"scored_at", "TEXT"},
 	{"salary_source", "TEXT"},
@@ -176,6 +182,7 @@ func migrate(db *sql.DB) error {
 	// exist, so these are no-ops via IF NOT EXISTS).
 	for _, idx := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_jobs_content_hash ON jobs(content_hash)`,
+		`CREATE INDEX IF NOT EXISTS idx_jobs_structural_hash ON jobs(structural_hash)`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_fit_score ON jobs(fit_score)`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_application_method ON jobs(application_method)`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_apply_email ON jobs(apply_email)`,
@@ -268,8 +275,8 @@ INSERT INTO jobs (id,title,company,location,url,salary_raw,salary_low,salary_hig
   salary_currency,salary_source,description,summary,remote_type,status,notes,source,listed_at,
   searched_at,fetched_at,posted_at,posted_at_estimated,first_seen,last_seen,scraped_at,
   apply_email,apply_emails,apply_url,application_method,application_instruction,detail_status,
-  llm_summary,content_hash)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  llm_summary,content_hash,structural_hash,duplicate_classification,duplicate_of_job_id)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   title=excluded.title,
   company=COALESCE(NULLIF(excluded.company,''), jobs.company),
@@ -298,13 +305,17 @@ ON CONFLICT(id) DO UPDATE SET
   application_instruction=COALESCE(NULLIF(excluded.application_instruction,''), jobs.application_instruction),
   detail_status=COALESCE(NULLIF(excluded.detail_status,''), jobs.detail_status),
   llm_summary=COALESCE(NULLIF(excluded.llm_summary,''), jobs.llm_summary),
-  content_hash=COALESCE(NULLIF(excluded.content_hash,''), jobs.content_hash)`,
+  content_hash=COALESCE(NULLIF(excluded.content_hash,''), jobs.content_hash),
+  structural_hash=COALESCE(NULLIF(excluded.structural_hash,''), jobs.structural_hash),
+  duplicate_classification=COALESCE(NULLIF(excluded.duplicate_classification,''), jobs.duplicate_classification),
+  duplicate_of_job_id=COALESCE(NULLIF(excluded.duplicate_of_job_id,''), jobs.duplicate_of_job_id)`,
 		j.ID, j.Title, j.Company, j.Location, j.URL, j.SalaryRaw,
 		nullFloat(j.SalaryLow), nullFloat(j.SalaryHigh), j.SalaryCurrency, j.SalarySource,
 		j.Description, j.Summary, j.RemoteType, statusOrDefault(j.Status), j.Notes,
 		j.Source, j.ListedAt, j.SearchedAt, j.FetchedAt, j.PostedAt, boolInt(j.PostedAtEstimated),
 		j.FirstSeen, j.LastSeen, j.ScrapedAt, j.ApplyEmail, applyEmails, j.ApplyURL,
-		j.ApplicationMethod, j.ApplicationInstruction, j.DetailStatus, j.LLMSummary, j.ContentHash)
+		j.ApplicationMethod, j.ApplicationInstruction, j.DetailStatus, j.LLMSummary, j.ContentHash,
+		j.StructuralHash, j.DuplicateClassification, j.DuplicateOfJobID)
 	if err != nil {
 		return err
 	}
@@ -448,6 +459,20 @@ func (s *Store) FindByContentHash(hash string) (*models.JobPosting, error) {
 		return nil, nil
 	}
 	row := s.db.QueryRow(jobCols+` FROM jobs WHERE content_hash=? LIMIT 1`, hash)
+	return scanJob(row)
+}
+
+// FindByStructuralHash returns an earlier job with the same structural
+// fingerprint, excluding excludeID when provided.
+func (s *Store) FindByStructuralHash(hash, excludeID string) (*models.JobPosting, error) {
+	if hash == "" {
+		return nil, nil
+	}
+	if excludeID != "" {
+		row := s.db.QueryRow(jobCols+` FROM jobs WHERE structural_hash=? AND id<>? ORDER BY COALESCE(first_seen,searched_at) ASC LIMIT 1`, hash, excludeID)
+		return scanJob(row)
+	}
+	row := s.db.QueryRow(jobCols+` FROM jobs WHERE structural_hash=? ORDER BY COALESCE(first_seen,searched_at) ASC LIMIT 1`, hash)
 	return scanJob(row)
 }
 
@@ -606,7 +631,7 @@ func (s *Store) SearchFTS(expr string, limit int) ([]*models.JobPosting, error) 
   j.apply_email,j.apply_emails,j.apply_url,j.application_method,j.application_instruction,j.detail_status,
   j.company_overview,j.industry,j.tech_stack,j.seniority,j.employment_type,
   j.years_experience,j.company_size_band,j.company_stage,j.is_founding_role,j.fit_score,
-  j.fit_reason,j.content_hash,j.enriched_at,j.scored_at,
+  j.fit_reason,j.content_hash,j.structural_hash,j.duplicate_classification,j.duplicate_of_job_id,j.enriched_at,j.scored_at,
   j.rubric_scores FROM jobs j JOIN (SELECT id, rank FROM jobs_fts WHERE jobs_fts MATCH ?`
 	args := []interface{}{expr}
 	if limit > 0 {
@@ -755,7 +780,7 @@ const jobCols = `SELECT id,title,company,location,url,salary_raw,salary_low,sala
   apply_email,apply_emails,apply_url,application_method,application_instruction,detail_status,
   company_overview,industry,tech_stack,seniority,employment_type,
   years_experience,company_size_band,company_stage,is_founding_role,fit_score,
-  fit_reason,content_hash,enriched_at,scored_at,
+  fit_reason,content_hash,structural_hash,duplicate_classification,duplicate_of_job_id,enriched_at,scored_at,
   rubric_scores`
 
 type scanner interface {
@@ -768,7 +793,7 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 	var company, location, salaryRaw, cur, salarySource, desc, shortDesc, summary, llm, remote, status, notes, source, fetched sql.NullString
 	var postedAt, firstSeen, lastSeen, scrapedAt, applyEmail, applyEmails, applyURL, applicationMethod, applicationInstruction, detailStatus sql.NullString
 	var listed, postedAtEstimated sql.NullInt64
-	var companyOverview, industry, techStack, seniority, employmentType, companySizeBand, companyStage, fitReason, contentHash, enrichedAt, scoredAt sql.NullString
+	var companyOverview, industry, techStack, seniority, employmentType, companySizeBand, companyStage, fitReason, contentHash, structuralHash, duplicateClassification, duplicateOfJobID, enrichedAt, scoredAt sql.NullString
 	var rubricScores sql.NullString
 	var yearsExp, isFounding, fitScore sql.NullInt64
 	if err := row.Scan(&j.ID, &j.Title, &company, &location, &j.URL, &salaryRaw, &sl, &sh,
@@ -777,7 +802,7 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 		&applyEmail, &applyEmails, &applyURL, &applicationMethod, &applicationInstruction, &detailStatus,
 		&companyOverview, &industry, &techStack, &seniority, &employmentType, &yearsExp,
 		&companySizeBand, &companyStage, &isFounding, &fitScore,
-		&fitReason, &contentHash, &enrichedAt, &scoredAt,
+		&fitReason, &contentHash, &structuralHash, &duplicateClassification, &duplicateOfJobID, &enrichedAt, &scoredAt,
 		&rubricScores); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -841,6 +866,9 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 	}
 	j.FitReason = fitReason.String
 	j.ContentHash = contentHash.String
+	j.StructuralHash = structuralHash.String
+	j.DuplicateClassification = duplicateClassification.String
+	j.DuplicateOfJobID = duplicateOfJobID.String
 	j.EnrichedAt = enrichedAt.String
 	j.ScoredAt = scoredAt.String
 	j.RubricScores = rubricScores.String
