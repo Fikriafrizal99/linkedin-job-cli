@@ -199,3 +199,50 @@ func TestRunAuthLoginBothFail(t *testing.T) {
 		t.Error("expected error when both capture methods fail")
 	}
 }
+
+func TestNormalizeImportedCookieHeader(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "raw",
+			in:   "li_at=abc; JSESSIONID=\"ajax:123\";",
+			want: "li_at=abc; JSESSIONID=\"ajax:123\"",
+		},
+		{
+			name: "header line",
+			in:   "Cookie: li_at=abc; JSESSIONID=\"ajax:123\"",
+			want: "li_at=abc; JSESSIONID=\"ajax:123\"",
+		},
+		{
+			name: "copied headers",
+			in:   "accept: */*\nCookie: li_at=abc; JSESSIONID=\"ajax:123\"\nreferer: https://www.linkedin.com/",
+			want: "li_at=abc; JSESSIONID=\"ajax:123\"",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeImportedCookieHeader(tc.in); got != tc.want {
+				t.Fatalf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCookieHeaderHas(t *testing.T) {
+	header := "bcookie=x; li_at=secret; JSESSIONID=\"ajax:123\""
+	if !cookieHeaderHas(header, "li_at") {
+		t.Fatal("expected li_at")
+	}
+	if !cookieHeaderHas(header, "JSESSIONID") {
+		t.Fatal("expected JSESSIONID")
+	}
+	if cookieHeaderHas(header, "missing") {
+		t.Fatal("unexpected missing cookie")
+	}
+	if cookieHeaderHas("li_at=; JSESSIONID=x", "li_at") {
+		t.Fatal("empty cookie value should not count")
+	}
+}
