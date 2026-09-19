@@ -53,3 +53,14 @@ func TestExtractApplicationDataIgnoresLinkedInURL(t *testing.T) {
 		t.Fatalf("method=%q url=%q", got.Method, got.ApplyURL)
 	}
 }
+
+func TestExtractApplicationDataLinkedIn(t *testing.T) {
+	text := "This role supports LinkedIn Easy Apply. Please submit your application there."
+	got := ExtractApplicationData(text)
+	if got.Method != ApplicationMethodLinkedIn {
+		t.Fatalf("method=%q", got.Method)
+	}
+	if got.Instruction == "" {
+		t.Fatal("expected LinkedIn application instruction")
+	}
+}
