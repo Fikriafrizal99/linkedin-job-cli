@@ -461,6 +461,15 @@ linkedin-jobs contacts enrich --all --unknown-only --limit 10 --resolve
 
 Resolution requires a valid LinkedIn session. It inspects at most 10 search results per role target, has a configurable delay between role searches, and never sends a message or connection request.
 
+For WSL/headless environments, session material can be imported from standard input instead of command-line arguments:
+
+```bash
+printf '%s\n' '<Cookie header>' | linkedin-jobs auth import
+linkedin-jobs auth status
+```
+
+The import path validates that `li_at` and `JSESSIONID` are present and writes the session to the local cookie file with permission `0600`. Session values should never be committed, logged, or pasted into issue/chat history.
+
 ## External Boundary
 
 The future Application Engine consumes collector data but remains separately deployable.
