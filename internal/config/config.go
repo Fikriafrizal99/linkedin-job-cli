@@ -19,6 +19,8 @@ type Config struct {
 	UserAgent             string
 	RequestTimeoutSeconds int
 	DetailDelaySeconds    float64
+	HTTPMaxAttempts       int
+	HTTPRetryBaseSeconds  float64
 
 	// LLM pacing: seconds to wait between successive scoring calls in a run,
 	// to avoid provider rate limits (HTTP 429). 0 = no delay.
@@ -43,6 +45,8 @@ func Load() Config {
 		UserAgent:             defaultUA(),
 		RequestTimeoutSeconds: 20,
 		DetailDelaySeconds:    0.8,
+		HTTPMaxAttempts:       envInt("LJ_HTTP_MAX_ATTEMPTS", 3),
+		HTTPRetryBaseSeconds:  envFloat("LJ_HTTP_RETRY_BASE_SECONDS", 1.5),
 		LLMDelaySeconds:       envFloat("LJ_LLM_DELAY_SECONDS", 2.0),
 		LLMConcurrency:       envInt("LJ_LLM_CONCURRENCY", 5),
 		CookiesFile:           os.Getenv("LJ_COOKIES_FILE"),
