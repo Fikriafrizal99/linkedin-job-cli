@@ -1,7 +1,9 @@
 package hr
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"linkedin-jobs/internal/linkedin"
 	"linkedin-jobs/internal/models"
@@ -45,6 +47,120 @@ type collectorTarget struct {
 	Type        string
 	SearchTerms string
 	Why         string
+}
+
+// ContactResolution is the outcome of authenticated contact resolution.
+// Contacts always contains the role-level fallbacks; resolved profiles replace
+// those rows only when LinkedIn returns a sufficiently relevant current-company
+// person.
+type ContactResolution struct {
+	Contacts []models.JobContact
+	Resolved int
+	Warnings []string
+}
+
+// ResolveCollectorContacts upgrades deterministic role targets into concrete
+// LinkedIn profiles using an authenticated, company-scoped people search.
+// It never guesses names: unresolved targets stay as role-level heuristic rows.
+func ResolveCollectorContacts(client *linkedin.Client, ctx *linkedin.JobContext, co *linkedin.CompanyProfile, maxResults int, delaySeconds float64) ContactResolution {
+	base := CollectorContacts(ctx, co)
+	result := ContactResolution{Contacts: base}
+	if client == nil || ctx == nil {
+		return result
+	}
+	if strings.TrimSpace(ctx.CompanyID) == "" {
+		result.Warnings = append(result.Warnings, "company has no LinkedIn company id; keeping role-level contacts")
+		return result
+	}
+	if maxResults < 1 {
+		maxResults = 5
+	}
+	if maxResults > 10 {
+		maxResults = 10
+	}
+	if delaySeconds < 0 {
+		delaySeconds = 0
+	}
+
+	targets := collectorTargets(ctx)
+	usedProfiles := map[string]bool{}
+	for i, target := range targets {
+		candidates, err := client.SearchPeopleAtCompany(ctx.CompanyID, target.SearchTerms, maxResults)
+		if err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %v", target.Title, err))
+		} else if best, ok := bestPeopleCandidate(candidates, target, usedProfiles); ok {
+			resolvedTitle := strings.TrimSpace(best.Headline)
+			if resolvedTitle == "" {
+				resolvedTitle = target.Title
+			}
+			result.Contacts[i].Name = best.Name
+			result.Contacts[i].Title = resolvedTitle
+			result.Contacts[i].LinkedInURL = best.ProfileURL
+			result.Contacts[i].Source = "linkedin_voyager"
+			usedProfiles[best.ProfileURL] = true
+			result.Resolved++
+		}
+		if i < len(targets)-1 && delaySeconds > 0 {
+			time.Sleep(time.Duration(delaySeconds * float64(time.Second)))
+		}
+	}
+	return result
+}
+
+func bestPeopleCandidate(candidates []linkedin.PeopleSearchCandidate, target collectorTarget, used map[string]bool) (linkedin.PeopleSearchCandidate, bool) {
+	bestScore := 0
+	var best linkedin.PeopleSearchCandidate
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate.Name) == "" || strings.EqualFold(strings.TrimSpace(candidate.Name), "LinkedIn Member") {
+			continue
+		}
+		if candidate.ProfileURL == "" || used[candidate.ProfileURL] {
+			continue
+		}
+		score := roleMatchScore(candidate.Headline, target.SearchTerms)
+		if score > bestScore {
+			bestScore = score
+			best = candidate
+		}
+	}
+	return best, bestScore > 0
+}
+
+func roleMatchScore(headline, searchTerms string) int {
+	h := strings.ToLower(strings.TrimSpace(headline))
+	q := strings.ToLower(strings.TrimSpace(searchTerms))
+	if h == "" || q == "" {
+		return 0
+	}
+	score := 0
+	if strings.Contains(h, q) {
+		score += 10
+	}
+	generic := map[string]bool{
+		"manager": true, "head": true, "director": true, "vp": true,
+		"lead": true, "hiring": true, "team": true,
+	}
+	meaningful := 0
+	matchedMeaningful := 0
+	for _, token := range strings.Fields(q) {
+		token = strings.Trim(token, " /-&.,()")
+		if len(token) < 3 {
+			continue
+		}
+		if !generic[token] {
+			meaningful++
+		}
+		if strings.Contains(h, token) {
+			score++
+			if !generic[token] {
+				matchedMeaningful++
+			}
+		}
+	}
+	if meaningful > 0 && matchedMeaningful == 0 && score < 10 {
+		return 0
+	}
+	return score
 }
 
 func collectorTargets(ctx *linkedin.JobContext) []collectorTarget {
