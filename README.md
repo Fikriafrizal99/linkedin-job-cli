@@ -1,3 +1,17 @@
+# Fork Direction: LinkedIn Job Collector
+
+> This fork is being refactored into a focused **LinkedIn Job Collector**. The upstream README below is retained as a reference while the refactor is in progress.
+>
+> Approved project documents:
+> - [Project Scope](docs/PROJECT_SCOPE.md)
+> - [Target Architecture](docs/ARCHITECTURE.md)
+> - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
+> - [Backlog](BACKLOG.md)
+>
+> Scope rule: **collect accurately first; execute applications separately.** HR-contact research is retained as optional enrichment. Application execution, Gmail drafts, CV selection, and multi-source collectors belong to later/separate work.
+
+---
+
 # linkedin-jobs
 
 <p align="center">
