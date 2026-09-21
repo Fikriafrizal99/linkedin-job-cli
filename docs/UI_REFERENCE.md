@@ -277,9 +277,9 @@ POST /app/cv-profiles/attachments/<id>/delete
 
 Uploaded CVs and supporting files are stored under the local `~/.linkedin-jobs/files/` directory. Application Detail exposes configured supporting files as optional checkboxes and includes only the selected files when creating the Gmail draft.
 
-CV upload/replace, additional supporting-file upload, and the per-application optional attachment picker have been live-validated in the user's local browser. Gmail draft creation with selected optional attachments remains pending live validation.
+CV upload/replace, additional supporting-file upload, the per-application optional attachment picker, and Gmail draft creation with selected optional attachments have all been live-validated in the user's local browser.
 
-### Native Gmail OAuth — live validated / Draft creation pending live validation
+### Native Gmail OAuth + Draft Creation — live validated
 
 The local web application now supports native Gmail OAuth and draft creation without depending on the ChatGPT Gmail connector.
 
@@ -307,7 +307,7 @@ Implementation boundaries:
 - the UI blocks draft creation if the selected CV file is missing;
 - Gmail OAuth is restricted to a local loopback host.
 
-Gmail OAuth connection has been live-validated in the user's local browser. Native draft creation remains pending live validation.
+Gmail OAuth connection and native Gmail draft creation have been live-validated in the user's local browser. Multi-attachment Gmail draft creation has also been live-validated with a CV plus portfolio attachment.
 
 See `docs/GMAIL_SETUP.md` for setup instructions.
 
