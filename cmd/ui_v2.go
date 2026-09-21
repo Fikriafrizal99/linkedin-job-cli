@@ -35,6 +35,7 @@ type appJobRow struct {
 
 type appApplicationRow struct {
 	JobID, Title, Company, Method, State, Recipient, Updated, DraftID string
+	Prepared bool
 }
 
 type appCVProfile struct {
@@ -87,6 +88,14 @@ type appPageData struct {
 	GmailTokenPath string
 	GmailCredentialsFound bool
 	GmailConnected bool
+	ReviewMode bool
+	ReviewPosition int
+	ReviewTotal int
+	ReviewPrevURL string
+	ReviewNextURL string
+	ReviewStayURL string
+	SendConfirmMode bool
+	SendCandidates []appSendCandidate
 	Error string
 }
 
@@ -407,6 +416,24 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	case "unapproved":
 		pd.ActionMessage = "Approval removed. The Gmail draft is back in manual review and no email was sent."
 	}
+	if action := strings.TrimSpace(r.URL.Query().Get("bulk")); action != "" {
+		ok, _ := strconv.Atoi(r.URL.Query().Get("ok"))
+		skipped, _ := strconv.Atoi(r.URL.Query().Get("skipped"))
+		failed, _ := strconv.Atoi(r.URL.Query().Get("failed"))
+		switch action {
+		case "prepare":
+			pd.ActionMessage = fmt.Sprintf("Bulk prepare finished: %d prepared, %d skipped, %d failed.", ok, skipped, failed)
+		case "draft":
+			pd.ActionMessage = fmt.Sprintf("Bulk draft creation finished: %d created, %d skipped, %d failed.", ok, skipped, failed)
+		case "review":
+			pd.ActionMessage = fmt.Sprintf("Review selection: %d eligible, %d skipped, %d failed.", ok, skipped, failed)
+		case "send":
+			pd.ActionMessage = fmt.Sprintf("Explicit send finished: %d sent, %d skipped, %d failed.", ok, skipped, failed)
+		}
+	}
+	if bulkErr := strings.TrimSpace(r.URL.Query().Get("bulk_error")); bulkErr != "" {
+		pd.ActionError = bulkErr
+	}
 	if fileErr := strings.TrimSpace(r.URL.Query().Get("file_error")); fileErr != "" {
 		pd.ActionError = fileErr
 	}
@@ -518,13 +545,40 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			row := appApplicationRow{
 				JobID: a.JobID, Method: "EMAIL", State: a.State, Recipient: a.Recipient,
 				Updated: displayDate(a.UpdatedAt), DraftID: a.GmailDraftID,
+				Prepared: strings.TrimSpace(a.Subject) != "" && strings.TrimSpace(a.Body) != "" && strings.TrimSpace(a.CVProfile) != "",
 			}
 			if j != nil {
 				row.Title, row.Company, row.Method = j.Title, j.Company, j.ApplicationMethod
 			}
 			pd.Applications = append(pd.Applications, row)
 		}
-		if len(parts) > 1 {
+		if len(parts) > 1 && parts[1] == "review" {
+			pd.Title, pd.Subtitle = "Review Queue", "Review Gmail drafts sequentially without opening each application page."
+			pd.ReviewMode = true
+			queue := reviewQueueIDs(apps, r.URL.Query().Get("ids"))
+			pd.ReviewTotal = len(queue)
+			if len(queue) > 0 {
+				pos := 0
+				if raw := strings.TrimSpace(r.URL.Query().Get("pos")); raw != "" {
+					if n, convErr := strconv.Atoi(raw); convErr == nil {
+						pos = n
+					}
+				}
+				if pos < 0 { pos = 0 }
+				if pos >= len(queue) { pos = len(queue)-1 }
+				pd.ReviewPosition = pos + 1
+				a, getErr := ws.st.GetApplicationByJobID(queue[pos])
+				if getErr != nil { return pd, getErr }
+				pd.SelectedApplication = a
+				if a != nil {
+					pd.SelectedApplicationJob = jobByID[a.JobID]
+					pd.SelectedCVPath, pd.SelectedCVReady = selectedCVStatus(settings.Application.CVProfiles, a.CVProfile)
+				}
+				pd.ReviewPrevURL = reviewQueueURL(queue, pos-1)
+				pd.ReviewNextURL = reviewQueueURL(queue, pos+1)
+				pd.ReviewStayURL = reviewQueueURL(queue, pos)
+			}
+		} else if len(parts) > 1 {
 			pd.Title, pd.Subtitle = "Application Detail", "Review and manage a prepared application."
 			a, err := ws.st.GetApplicationByJobID(parts[1])
 			if err != nil { return pd, err }
@@ -543,6 +597,49 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		return pd, fmt.Errorf("unknown UI page %q", section)
 	}
 	return pd, nil
+}
+
+func reviewQueueIDs(apps []models.JobApplication, raw string) []string {
+	selected := map[string]bool{}
+	raw = strings.TrimSpace(raw)
+	if raw != "" {
+		for _, id := range strings.Split(raw, ",") {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				selected[id] = true
+			}
+		}
+	}
+	out := make([]string, 0)
+	for _, a := range apps {
+		if a.State != models.ApplicationStateDraftCreated {
+			continue
+		}
+		if len(selected) > 0 && !selected[a.JobID] {
+			continue
+		}
+		out = append(out, a.JobID)
+		if len(out) >= maxBulkApplicationSelection {
+			break
+		}
+	}
+	return out
+}
+
+func reviewQueueURL(ids []string, pos int) string {
+	if len(ids) == 0 {
+		return "/app/applications/review"
+	}
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(ids) {
+		pos = len(ids)-1
+	}
+	q := url.Values{}
+	q.Set("ids", strings.Join(ids, ","))
+	q.Set("pos", strconv.Itoa(pos))
+	return "/app/applications/review?" + q.Encode()
 }
 
 func selectedCVStatus(profiles []config.CVProfileSettings, profileID string) (string, bool) {
