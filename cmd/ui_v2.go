@@ -232,28 +232,6 @@ func (ws *webServer) handleAppPrepareApplication(w http.ResponseWriter, r *http.
 		return
 	}
 
-	a, err := ws.st.GetApplicationByJobID(jobID)
-	if err != nil {
-		redirectApplicationAction(w, r, jobID, err)
-		return
-	}
-	if a == nil {
-		redirectApplicationAction(w, r, jobID, fmt.Errorf("application is not queued"))
-		return
-	}
-	if a.State != models.ApplicationStateReadyEmail {
-		redirectApplicationAction(w, r, jobID, fmt.Errorf("application state is %s; expected READY_EMAIL", a.State))
-		return
-	}
-
-	job, err := ws.st.Get(jobID)
-	if err != nil || job == nil {
-		if err == nil {
-			err = fmt.Errorf("collector job not found")
-		}
-		redirectApplicationAction(w, r, jobID, err)
-		return
-	}
 	settings, err := config.LoadSettings()
 	if err != nil {
 		redirectApplicationAction(w, r, jobID, fmt.Errorf("load settings: %w", err))
@@ -265,21 +243,49 @@ func (ws *webServer) handleAppPrepareApplication(w http.ResponseWriter, r *http.
 		redirectApplicationAction(w, r, jobID, fmt.Errorf("CV profile id is too long"))
 		return
 	}
-	prepared, err := appengine.Prepare(job, settings.Application, override)
+	a, err := prepareApplicationForUI(ws.st, jobID, settings.Application, override)
 	if err != nil {
-		redirectApplicationAction(w, r, jobID, err)
-		return
-	}
-	if _, err := ws.st.SaveApplicationPreparation(jobID, prepared.Subject, prepared.Body, prepared.CVProfile); err != nil {
 		redirectApplicationAction(w, r, jobID, err)
 		return
 	}
 
 	q := url.Values{"prepared": {"1"}}
-	if prepared.CVProfile != "" {
-		q.Set("cv_profile", prepared.CVProfile)
+	if a.CVProfile != "" {
+		q.Set("cv_profile", a.CVProfile)
 	}
 	http.Redirect(w, r, "/app/applications/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
+}
+
+func prepareApplicationForUI(st *store.Store, jobID string, settings config.ApplicationSettings, override string) (*models.JobApplication, error) {
+	if st == nil {
+		return nil, fmt.Errorf("store is required")
+	}
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, fmt.Errorf("missing job id")
+	}
+	a, err := st.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if a == nil {
+		return nil, fmt.Errorf("application is not queued")
+	}
+	if a.State != models.ApplicationStateReadyEmail {
+		return nil, fmt.Errorf("application state is %s; expected READY_EMAIL", a.State)
+	}
+	job, err := st.Get(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if job == nil {
+		return nil, fmt.Errorf("collector job not found")
+	}
+	prepared, err := appengine.Prepare(job, settings, strings.TrimSpace(override))
+	if err != nil {
+		return nil, err
+	}
+	return st.SaveApplicationPreparation(jobID, prepared.Subject, prepared.Body, prepared.CVProfile)
 }
 
 func redirectApplicationAction(w http.ResponseWriter, r *http.Request, jobID string, actionErr error) {
