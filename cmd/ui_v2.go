@@ -657,7 +657,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				pd.EasyApplyPrevURL = easyApplyQueueURL(queue, pos-1)
 				pd.EasyApplyNextURL = easyApplyQueueURL(queue, pos+1)
 				pd.EasyApplyStayURL = easyApplyQueueURL(queue, pos)
-				for idx := pos; idx < len(queue) && idx < pos+3; idx++ {
+				for idx := pos+1; idx < len(queue) && idx < pos+4; idx++ {
 					id := queue[idx]
 					app := appByJobID[id]
 					job := jobByID[id]
@@ -820,7 +820,15 @@ func matchesUIApplication(a *models.JobApplication, j *models.JobPosting, q, met
 }
 
 func preferredApplication(apps []models.JobApplication) *models.JobApplication {
-	for _, state := range []string{models.ApplicationStateApproved, models.ApplicationStateDraftCreated, models.ApplicationStateReadyEmail, models.ApplicationStateSent} {
+	for _, state := range []string{
+		models.ApplicationStateApproved,
+		models.ApplicationStateDraftCreated,
+		models.ApplicationStateReadyEmail,
+		models.ApplicationStateInProgress,
+		models.ApplicationStateReadyEasyApply,
+		models.ApplicationStateSent,
+		models.ApplicationStateApplied,
+	} {
 		for i := range apps {
 			if apps[i].State == state {
 				a := apps[i]
