@@ -514,3 +514,24 @@ Draft Generator
 ```
 
 The collector must not require the Application Engine to function.
+
+
+## Application Engine Boundary
+
+Application execution state is stored separately from collector state.
+
+```text
+jobs
+  |
+  v
+applications
+  |
+  +-- READY_EMAIL
+  +-- NEED_REVIEW
+  +-- DRAFT_CREATED
+  +-- SENT
+```
+
+The collector remains the source of job metadata such as `apply_email` and `application_method`. The Application Engine owns CV-profile selection, prepared email content, Gmail draft identifiers, and later send/follow-up state.
+
+CV selection is deterministic and configuration-driven. Profiles live under `application.cv_profiles` in `settings.yaml`; title keyword matches receive higher weight than description matches, with `default_cv_profile` as fallback. Preparing an application does not advance it past `READY_EMAIL` and never sends email.
