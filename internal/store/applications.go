@@ -78,6 +78,35 @@ ON CONFLICT(job_id) DO UPDATE SET
 	return s.GetApplicationByJobID(jobID)
 }
 
+// SaveApplicationPreparation stores deterministic draft content while keeping
+// lifecycle state unchanged. Only queued applications may be prepared.
+func (s *Store) SaveApplicationPreparation(jobID, subject, body, cvProfile string) (*models.JobApplication, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, fmt.Errorf("empty job id")
+	}
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State == models.ApplicationStateSent {
+		return nil, fmt.Errorf("application for job %s is already SENT", jobID)
+	}
+
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications
+SET subject=?, body=?, cv_profile=?, last_error='', updated_at=?
+WHERE job_id=?
+`, strings.TrimSpace(subject), strings.TrimSpace(body), strings.TrimSpace(cvProfile), now, jobID); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(jobID)
+}
+
 func (s *Store) GetApplicationByJobID(jobID string) (*models.JobApplication, error) {
 	row := s.db.QueryRow(`
 SELECT id,job_id,state,COALESCE(recipient,''),COALESCE(subject,''),
