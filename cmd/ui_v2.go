@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -53,6 +54,13 @@ type appPageData struct {
 	ProfileLocation string
 	ProfileArrangement string
 	ProfileSalary string
+	Query string
+	LocationFilter string
+	MethodFilter string
+	StateFilter string
+	Locations []string
+	Methods []string
+	States []string
 	Error string
 }
 
@@ -139,6 +147,23 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		return pd, err
 	}
 
+	pd.Query = strings.TrimSpace(r.URL.Query().Get("q"))
+	pd.LocationFilter = strings.TrimSpace(r.URL.Query().Get("location"))
+	pd.MethodFilter = strings.TrimSpace(r.URL.Query().Get("method"))
+	pd.StateFilter = strings.TrimSpace(r.URL.Query().Get("state"))
+
+	locationSet := map[string]bool{}
+	methodSet := map[string]bool{}
+	for _, j := range jobs {
+		if v := strings.TrimSpace(j.Location); v != "" { locationSet[v] = true }
+		if v := strings.TrimSpace(j.ApplicationMethod); v != "" { methodSet[v] = true }
+	}
+	for v := range locationSet { pd.Locations = append(pd.Locations, v) }
+	for v := range methodSet { pd.Methods = append(pd.Methods, v) }
+	sort.Strings(pd.Locations)
+	sort.Strings(pd.Methods)
+	pd.States = []string{"NOT_APPLIED", models.ApplicationStateReadyEmail, models.ApplicationStateDraftCreated, models.ApplicationStateApproved, models.ApplicationStateSent}
+
 	jobByID := map[string]*models.JobPosting{}
 	for _, j := range jobs {
 		jobByID[j.ID] = j
@@ -184,7 +209,11 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	case "jobs":
 		pd.Active, pd.Title, pd.Subtitle = "jobs", "Jobs", "View, search, and manage all collected job listings."
 		for _, j := range jobs {
-			pd.Jobs = append(pd.Jobs, uiJobRow(j, applicationStateFor(j.ID, apps)))
+			state := applicationStateFor(j.ID, apps)
+			if !matchesUIJob(j, state, pd.Query, pd.LocationFilter, pd.MethodFilter, pd.StateFilter) {
+				continue
+			}
+			pd.Jobs = append(pd.Jobs, uiJobRow(j, state))
 		}
 		if len(parts) > 1 {
 			pd.Title, pd.Subtitle = "Job Detail", "Detailed view of a collected LinkedIn job."
@@ -197,6 +226,9 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		pd.Active, pd.Title, pd.Subtitle = "applications", "Applications", "Track and manage your application pipeline."
 		for _, a := range apps {
 			j := jobByID[a.JobID]
+			if !matchesUIApplication(&a, j, pd.Query, pd.MethodFilter, pd.StateFilter) {
+				continue
+			}
 			row := appApplicationRow{
 				JobID: a.JobID, Method: "EMAIL", State: a.State, Recipient: a.Recipient,
 				Updated: displayDate(a.UpdatedAt), DraftID: a.GmailDraftID,
@@ -224,6 +256,34 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		return pd, fmt.Errorf("unknown UI page %q", section)
 	}
 	return pd, nil
+}
+
+func matchesUIJob(j *models.JobPosting, state, q, location, method, appState string) bool {
+	if j == nil { return false }
+	if q != "" {
+		blob := strings.ToLower(strings.Join([]string{j.Title, j.Company, j.Location, j.ApplyEmail}, " "))
+		if !strings.Contains(blob, strings.ToLower(q)) { return false }
+	}
+	if location != "" && !strings.EqualFold(strings.TrimSpace(j.Location), location) { return false }
+	if method != "" && !strings.EqualFold(strings.TrimSpace(j.ApplicationMethod), method) { return false }
+	if appState != "" && !strings.EqualFold(state, appState) { return false }
+	return true
+}
+
+func matchesUIApplication(a *models.JobApplication, j *models.JobPosting, q, method, state string) bool {
+	if a == nil { return false }
+	if state != "" && !strings.EqualFold(a.State, state) { return false }
+	if method != "" {
+		jobMethod := ""
+		if j != nil { jobMethod = j.ApplicationMethod }
+		if !strings.EqualFold(strings.TrimSpace(jobMethod), method) { return false }
+	}
+	if q != "" {
+		parts := []string{a.JobID, a.Recipient, a.Subject}
+		if j != nil { parts = append(parts, j.Title, j.Company, j.Location) }
+		if !strings.Contains(strings.ToLower(strings.Join(parts, " ")), strings.ToLower(q)) { return false }
+	}
+	return true
 }
 
 func preferredApplication(apps []models.JobApplication) *models.JobApplication {
@@ -316,11 +376,12 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 .panel{background:linear-gradient(145deg,#0f2135,#0d1c2e);border:1px solid #223a55;border-radius:12px;overflow:hidden}.panel-head{height:56px;padding:0 16px;display:flex;align-items:center;border-bottom:1px solid #223a55}.panel-head h2{margin:0;font-size:17px}.panel-head .sub{margin-left:auto;color:#6caeff;font-size:12px}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(320px,1fr);gap:14px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th{height:38px;padding:0 12px;text-align:left;font-size:11px;font-weight:500;color:#9bacc0;background:#0e1e30;border-bottom:1px solid #25405d;white-space:nowrap}td{padding:11px 12px;border-bottom:1px solid #21384f;color:#cbd6e4;white-space:nowrap}tr:hover td{background:#112944}.job-link{color:#62aaff;font-weight:500}.muted{color:var(--muted)}.badge{display:inline-flex;align-items:center;border:1px solid transparent;border-radius:7px;padding:4px 8px;font-size:10px;font-weight:600;letter-spacing:.02em}.state-ready_email{background:#123d72;color:#7db7ff;border-color:#1d4d88}.state-draft_created{background:#342362;color:#b89aff;border-color:#4b327e}.state-approved,.state-sent{background:#124b3a;color:#6be2af;border-color:#1c614a}.state-not_applied{background:#26354a;color:#b9c6d5;border-color:#35475c}.method-email{background:#193653;color:#b8d7f7;border-color:#2e4e6e}.method-linkedin{background:#172f4a;color:#83b7f1;border-color:#274a70}.method-unknown{background:#303847;color:#bdc7d3;border-color:#465162}
 .detail{padding:18px}.detail-title{display:flex;align-items:start;justify-content:space-between;gap:12px}.detail h2{margin:0 0 3px;font-size:19px}.company{color:#aebed0}.meta{display:grid;gap:8px;margin:16px 0;color:#9fb1c6;font-size:12px}.tabs{display:flex;border-bottom:1px solid #28415d;margin:0 -18px 16px;padding:0 18px}.tab{padding:10px 14px;color:#91a5bc;border-bottom:2px solid transparent}.tab.active{color:#73b2ff;border-bottom-color:#3d99ff}.field-label{font-size:11px;color:#9fb0c4;margin:12px 0 6px}.field{background:#152a42;border:1px solid #294760;border-radius:8px;padding:10px;color:#e0e8f2;white-space:pre-wrap}.email-body{min-height:170px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}.detail-actions{display:flex;gap:8px;margin-top:16px}.detail-actions .btn{flex:1}
 .quick-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}.quick{border:1px solid #223d58;background:#10243a;border-radius:10px;padding:14px}.quick strong{display:block}.quick small{color:var(--muted)}
-.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px}.toolbar .search{flex:1}.control{height:38px;border:1px solid #29455f;border-radius:8px;background:#13273e;color:#dbe5f1;padding:0 11px}.content-card{background:#0f2033;border:1px solid #223b56;border-radius:12px;overflow:hidden}.content-pad{padding:18px}.two-col{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,.8fr);gap:14px}.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.info-card{border:1px solid #27425d;background:#102338;border-radius:10px;padding:14px}.info-card h3{margin:0 0 10px;font-size:14px}.info-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #20384f}.info-row:last-child{border-bottom:0}.info-row span:first-child{color:#8194ab}
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px}.toolbar .search{flex:1}.toolbar form{display:contents}.control{height:38px;border:1px solid #29455f;border-radius:8px;background:#13273e;color:#dbe5f1;padding:0 11px}.content-card{background:#0f2033;border:1px solid #223b56;border-radius:12px;overflow:hidden}.content-pad{padding:18px}.two-col{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,.8fr);gap:14px}.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.info-card{border:1px solid #27425d;background:#102338;border-radius:10px;padding:14px}.info-card h3{margin:0 0 10px;font-size:14px}.info-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #20384f}.info-row:last-child{border-bottom:0}.info-row span:first-child{color:#8194ab}
 .cv-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.cv-card{background:#10243a;border:1px solid #24415e;border-radius:12px;padding:18px;min-height:220px}.cv-card h3{margin:0;font-size:16px}.cv-default{float:right;background:#124b3a;color:#6be2af;border-radius:8px;padding:3px 7px;font-size:10px}.cv-path{color:#63aaff;margin:18px 0 8px;word-break:break-all}.cv-card p{color:#9cafc4;font-size:12px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.form-group label{display:block;color:#96a9bf;font-size:11px;margin-bottom:6px}.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #29475f;background:#142a42;color:#e5edf6;border-radius:8px;padding:10px}.collect-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.7fr);gap:14px}.progress-list{display:grid;gap:13px;margin-top:14px}.progress-item{display:flex;gap:9px;align-items:center;color:#a9b9cb}.dot{width:9px;height:9px;border-radius:50%;background:#25c58b;box-shadow:0 0 10px rgba(37,197,139,.45)}
 .settings-grid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px}.settings-menu a{display:block;padding:10px 11px;border-radius:8px;color:#a9b9cb}.settings-menu a.active{background:#173b64;color:#76b4ff}.empty{padding:44px;text-align:center;color:#8194aa}
 .alert{padding:10px 13px;border:1px solid #6e4b25;background:#382919;color:#f1c178;border-radius:8px;margin-bottom:14px}
-.footer-note{color:#637991;font-size:11px;margin-top:14px}
+.pipeline-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.pipeline-mini{background:#10243a;border:1px solid #223d58;border-radius:10px;padding:12px 14px}.pipeline-mini b{font-size:20px;display:block}.pipeline-mini span{font-size:11px;color:#8fa4bc}.footer-note{color:#637991;font-size:11px;margin-top:14px}
+@media(max-width:1400px) and (min-width:1051px){.main{padding-top:calc(var(--top) + 20px)}.page-head{margin-bottom:16px}.grid-kpi{gap:12px;margin-bottom:14px}.kpi{min-height:96px;padding:15px}.panel-head{height:54px}.detail{padding:16px}.email-body{min-height:145px}}
 @media(max-width:1050px){.grid-kpi{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.two-col,.collect-grid{grid-template-columns:1fr}.cv-grid{grid-template-columns:1fr 1fr}.quick-actions{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){:root{--sidebar:0px}.sidebar{display:none}.topbar{left:0}.main{margin-left:0;padding-left:14px;padding-right:14px}.grid-kpi,.cv-grid,.form-grid,.detail-grid{grid-template-columns:1fr}.top-user .name{display:none}.global-search{width:70vw}}
 </style>
@@ -341,7 +402,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   <div class="quote">“A better career is a series of small, consistent steps.”<b>Keep going. 🚀</b></div>
 </aside>
 <header class="topbar">
-  <input class="global-search" placeholder="Search jobs, companies, or keywords…" aria-label="Global search">
+  <form action="/app/jobs" method="get" style="display:contents"><input class="global-search" name="q" value="{{.Query}}" placeholder="Search jobs, companies, or keywords…" aria-label="Global search"></form>
   <div class="top-user"><div class="avatar">{{.CandidateInitials}}</div><div class="name">{{.CandidateName}}<small>Local Job Command Center</small></div></div>
 </header>
 <main class="main">
@@ -393,7 +454,13 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <aside class="content-card"><div class="content-pad"><h3>Application</h3><p class="muted">Explicit data extracted from the posting.</p><div class="info-row"><span>Method</span><b>{{.SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Email</span><b>{{.SelectedJob.ApplyEmail}}</b></div>{{if .SelectedJob.ApplyURL}}<a class="btn ghost" style="display:block;text-align:center;margin-top:12px" target="_blank" href="{{.SelectedJob.ApplyURL}}">Open Apply URL ↗</a>{{end}}</div></aside>
       </section>
     {{else}}
-      <div class="toolbar"><input class="control search" placeholder="Search jobs, companies, or keywords…"><select class="control"><option>Location</option></select><select class="control"><option>Method</option></select><select class="control"><option>Status</option></select><button class="btn ghost">Reset</button></div>
+      <form class="toolbar" method="get" action="/app/jobs">
+        <input class="control search" name="q" value="{{.Query}}" placeholder="Search jobs, companies, or keywords…">
+        <select class="control" name="location"><option value="">All locations</option>{{range .Locations}}<option value="{{.}}" {{if eq $.LocationFilter .}}selected{{end}}>{{.}}</option>{{end}}</select>
+        <select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{.}}</option>{{end}}</select>
+        <select class="control" name="state"><option value="">All states</option>{{range .States}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{.}}</option>{{end}}</select>
+        <button class="btn primary" type="submit">Apply</button><a class="btn ghost" href="/app/jobs">Reset</a>
+      </form>
       <div class="content-card"><div class="table-wrap"><table><thead><tr><th>Job Title</th><th>Company</th><th>Location</th><th>Method</th><th>Status</th><th>Added</th></tr></thead><tbody>
       {{range .Jobs}}<tr><td><a class="job-link" href="/app/jobs/{{.ID}}">{{.Title}}</a></td><td>{{.Company}}</td><td class="muted">{{.Location}}</td><td><span class="badge method-{{lower .Method}}">{{.Method}}</span></td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
       </tbody></table></div>{{if not .Jobs}}<div class="empty">No jobs found.</div>{{end}}</div>
@@ -411,7 +478,18 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button><button class="btn ghost" disabled>Unapprove</button><button class="btn primary" disabled>Send (Optional)</button></div><div class="footer-note">Action wiring will reuse the existing guarded backend lifecycle. No send action is enabled in this UI phase.</div>
       </div></div>
     {{else}}
-      <div class="toolbar"><input class="control search" placeholder="Search applications…"><select class="control"><option>Status</option></select><select class="control"><option>Method</option></select><button class="btn ghost">Reset</button></div>
+      <div class="pipeline-strip">
+        <div class="pipeline-mini"><b>{{.Stats.ReadyTotal}}</b><span>Ready Email</span></div>
+        <div class="pipeline-mini"><b>{{.Stats.DraftTotal}}</b><span>Draft Created</span></div>
+        <div class="pipeline-mini"><b>{{.Stats.ApprovedTotal}}</b><span>Approved</span></div>
+        <div class="pipeline-mini"><b>{{.Stats.SentTotal}}</b><span>Sent</span></div>
+      </div>
+      <form class="toolbar" method="get" action="/app/applications">
+        <input class="control search" name="q" value="{{.Query}}" placeholder="Search applications…">
+        <select class="control" name="state"><option value="">All states</option>{{range .States}}{{if ne . "NOT_APPLIED"}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{.}}</option>{{end}}{{end}}</select>
+        <select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{.}}</option>{{end}}</select>
+        <button class="btn primary" type="submit">Apply</button><a class="btn ghost" href="/app/applications">Reset</a>
+      </form>
       <div class="content-card"><div class="table-wrap"><table><thead><tr><th>Job Title</th><th>Company</th><th>Method</th><th>Status</th><th>Recipient</th><th>Updated</th></tr></thead><tbody>
       {{range .Applications}}<tr><td><a class="job-link" href="/app/applications/{{.JobID}}">{{.Title}}</a></td><td>{{.Company}}</td><td><span class="badge method-{{lower .Method}}">{{.Method}}</span></td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Recipient}}</td><td class="muted">{{.Updated}}</td></tr>{{end}}
       </tbody></table></div>{{if not .Applications}}<div class="empty">No applications queued yet.</div>{{end}}</div>
@@ -424,7 +502,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 
   {{if eq .Active "collect"}}
     <div class="collect-grid">
-      <section class="content-card"><div class="content-pad"><h2>Search Criteria</h2><div class="form-grid"><div class="form-group"><label>Keywords / Job Title</label><input value="sales executive" placeholder="e.g. Sales Executive"></div><div class="form-group"><label>Location</label><input value="Indonesia"></div><div class="form-group"><label>Posted Within</label><select><option>Past week</option><option>Past 24 hours</option><option>Past month</option></select></div><div class="form-group"><label>Maximum Results</label><input value="50"></div></div><div class="form-group" style="margin-top:12px"><label>Command Preview</label><div class="field">linkedin-jobs collect "Sales Executive" --location "Indonesia" --posted-within 7d</div></div><button class="btn primary" disabled style="margin-top:14px">Start Collecting</button><div class="footer-note">UI action is intentionally disabled until the collector POST endpoint is wired with CSRF and bounded execution.</div></div></section>
+      <section class="content-card"><div class="content-pad"><h2>Search Criteria</h2><div class="form-grid"><div class="form-group"><label>Keywords / Job Title</label><input id="collect-keywords" value="Sales Executive" placeholder="e.g. Sales Executive"></div><div class="form-group"><label>Location</label><input id="collect-location" value="Indonesia"></div><div class="form-group"><label>Posted Within</label><select id="collect-posted"><option value="7d">Past week</option><option value="1d">Past 24 hours</option><option value="30d">Past month</option></select></div><div class="form-group"><label>Maximum Results</label><input id="collect-top" value="50"></div></div><div class="form-group" style="margin-top:12px"><label>Command Preview</label><div class="field" id="collect-preview">linkedin-jobs collect "Sales Executive" --location "Indonesia" --posted-within 7d --top 50</div></div><button class="btn primary" disabled style="margin-top:14px">Start Collecting</button><div class="footer-note">UI action is intentionally disabled until the collector POST endpoint is wired with CSRF and bounded execution.</div></div></section>
       <aside class="content-card"><div class="content-pad"><h2>Collection Progress</h2><div class="progress-list"><div class="progress-item"><span class="dot"></span>Ready to run collector</div><div class="progress-item"><span class="dot"></span>SQLite store available</div><div class="progress-item"><span class="dot"></span>Application extraction enabled</div><div class="progress-item"><span class="dot"></span>Rate-limit safeguards active</div></div></div></aside>
     </div>
   {{end}}
@@ -436,5 +514,20 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 
 </main>
 </div>
+<script>
+(function(){
+  var k=document.getElementById('collect-keywords'), l=document.getElementById('collect-location'), p=document.getElementById('collect-posted'), t=document.getElementById('collect-top'), out=document.getElementById('collect-preview');
+  function q(v){return '"' + String(v||'').replace(/"/g,'\\\"') + '"'}
+  function update(){
+    if(!out||!k)return;
+    var cmd='linkedin-jobs collect '+q(k.value.trim()||'Sales Executive');
+    if(l&&l.value.trim())cmd+=' --location '+q(l.value.trim());
+    if(p&&p.value)cmd+=' --posted-within '+p.value;
+    if(t&&t.value)cmd+=' --top '+t.value;
+    out.textContent=cmd;
+  }
+  [k,l,p,t].forEach(function(el){if(el){el.addEventListener('input',update);el.addEventListener('change',update)}}); update();
+})();
+</script>
 </body>
 </html>`;
