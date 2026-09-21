@@ -44,7 +44,7 @@ func TestCollectorIntegration_AnonymousSearchDetailAndPersistence(t *testing.T) 
 		switch r.URL.Query().Get("start") {
 		case "":
 			fmt.Fprint(w, cardHTML("1001", "Account Executive", "Acme A", "Jakarta", "", "2 days ago", server.URL+"/detail/1001"))
-			fmt.Fprint(w, cardHTML("1002", "Sales Executive", "Acme B", "Bandung", "2026-09-20", "1 day ago", server.URL+"/detail/1002"))
+			fmt.Fprint(w, cardHTML("1002", "Sales Executive", "Acme B", "Bandung", "", "1 day ago", server.URL+"/detail/1002"))
 		case "2":
 			fmt.Fprint(w, cardHTML("1003", "Field Sales Executive", "Acme C", "Surabaya", "2026-09-19", "2 days ago", server.URL+"/detail/1003"))
 		default:
