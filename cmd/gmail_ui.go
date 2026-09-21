@@ -178,6 +178,10 @@ func (ws *webServer) handleAppCreateGmailDraft(w http.ResponseWriter, r *http.Re
 		return
 	}
 	payload.AttachmentFiles = append(payload.AttachmentFiles, extraPaths...)
+	if err := validateDraftAttachmentTotal(payload.AttachmentFiles, 18<<20); err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
 	creds, err := gmailclient.LoadCredentials("")
 	if err != nil {
 		redirectApplicationAction(w, r, jobID, fmt.Errorf("Gmail is not configured: %w", err))
