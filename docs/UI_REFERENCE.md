@@ -384,12 +384,15 @@ Behavior:
 - **Queue Selected** creates application records without opening Job Detail one by one;
 - **Process Selected to Draft** chains Queue → deterministic Prepare → Gmail Draft for eligible records;
 - Gmail-facing processing is capped at 25 selected jobs, while queue-only batches allow up to 50;
-- jobs without an explicit email stop safely at `NEED_REVIEW`;
+- jobs without an explicit email are skipped by default and stay in Jobs;
+- Queue Selected exposes an explicit opt-in checkbox to add non-email jobs as `NEED_REVIEW`;
+- Process Selected to Draft always skips newly selected non-email jobs rather than creating queue noise;
 - existing `DRAFT_CREATED` applications are reused and included in the resulting Review Queue instead of creating duplicate drafts;
 - `APPROVED` and `SENT` records are skipped;
 - optional supporting-file selection is shared across drafts created by the batch;
 - the browser redirects directly into Review Queue when at least one selected item is reviewable;
-- no approval or email send occurs in this workflow.
+- no approval or email send occurs in this workflow;
+- `READY_EMAIL` and `NEED_REVIEW` applications can be removed from queue while keeping the collected Job; draft/review/sent states remain protected.
 
 This phase is covered by regression tests and is pending live browser validation.
 
