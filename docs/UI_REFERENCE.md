@@ -190,6 +190,33 @@ Dashboard, Jobs, Applications, CV Profiles, and Settings are populated from the 
 
 The former server-rendered jobs browser is retained at `/legacy` during migration so existing filtering/status/delete regression coverage is not discarded.
 
+## Phase 3 — Functional wiring
+
+### Collect Jobs — implemented, pending live validation
+
+The Collect Jobs page now submits to a real CSRF-protected backend endpoint:
+
+```text
+POST /app/collect/run
+```
+
+The web action and CLI both use the same shared collector runner. The browser workflow is intentionally bounded:
+
+- anonymous public LinkedIn collection only;
+- keywords are required;
+- maximum 100 results per web run;
+- posted-within is validated through the existing collector parser;
+- existing LinkedIn job IDs are skipped;
+- structural dedup remains active;
+- full detail/application extraction still runs;
+- results are persisted to the existing SQLite store;
+- session fallback and force-overwrite remain CLI-only;
+- duplicate submissions are serialized by the local web server.
+
+After completion, the page reports searched, new-candidate, persisted, exact-duplicate, and likely-repost counts.
+
+This stage is implemented but should not be marked live-validated until a real browser collection run succeeds on the user's local environment.
+
 ## Reference assets
 
 - Detailed Dashboard: `docs/ui-reference/job-command-center.webp`
