@@ -209,6 +209,31 @@ SENT
 
 There is still no automatic sending.
 
+## Draft recovery when a Gmail draft was deleted
+
+Gmail drafts can be deleted outside the application while the local SQLite record still contains the old `gmail_draft_id`. In that case the lifecycle intentionally does not silently recreate anything.
+
+For `DRAFT_CREATED` or `APPROVED` records, Application Detail exposes an explicit recovery action:
+
+```text
+POST /app/applications/<job_id>/recreate-draft
+```
+
+Use **Recreate Gmail Draft** only when the provider draft is missing or unusable.
+
+Recovery behavior:
+
+- reuses the saved recipient, subject, body, and CV profile;
+- lets the user select supporting attachments again;
+- creates the replacement Gmail draft first;
+- only after Gmail succeeds does the local `gmail_draft_id` change;
+- a `DRAFT_CREATED` record remains `DRAFT_CREATED`;
+- an `APPROVED` record returns to `DRAFT_CREATED` and its previous review approval is cleared;
+- the replacement draft must be manually reviewed again;
+- `SENT` records cannot be recreated.
+
+This avoids treating an externally deleted Gmail draft as if it still exists while preserving the human review gate.
+
 ## Security boundaries
 
 - Gmail password is never requested.
