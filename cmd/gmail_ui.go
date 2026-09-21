@@ -148,6 +148,8 @@ func (ws *webServer) handleAppCreateGmailDraft(w http.ResponseWriter, r *http.Re
 	if !ws.checkCSRF(w, r) {
 		return
 	}
+	ws.lifecycleMu.Lock()
+	defer ws.lifecycleMu.Unlock()
 	jobID := strings.TrimSpace(r.PathValue("id"))
 	if jobID == "" {
 		http.Error(w, "missing job id", http.StatusBadRequest)
