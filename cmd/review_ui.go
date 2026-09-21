@@ -27,7 +27,10 @@ func (ws *webServer) handleAppApproveApplication(w http.ResponseWriter, r *http.
 		redirectApplicationReviewAction(w, r, jobID, "", fmt.Errorf("review note must be at most %d characters", maxReviewNoteLength))
 		return
 	}
-	if _, err := ws.st.ApproveApplication(jobID, note); err != nil {
+	ws.lifecycleMu.Lock()
+	_, err := ws.st.ApproveApplication(jobID, note)
+	ws.lifecycleMu.Unlock()
+	if err != nil {
 		redirectApplicationReviewAction(w, r, jobID, "", err)
 		return
 	}
@@ -48,7 +51,10 @@ func (ws *webServer) handleAppUnapproveApplication(w http.ResponseWriter, r *htt
 		redirectApplicationReviewAction(w, r, jobID, "", fmt.Errorf("review note must be at most %d characters", maxReviewNoteLength))
 		return
 	}
-	if _, err := ws.st.UnapproveApplication(jobID, note); err != nil {
+	ws.lifecycleMu.Lock()
+	_, err := ws.st.UnapproveApplication(jobID, note)
+	ws.lifecycleMu.Unlock()
+	if err != nil {
 		redirectApplicationReviewAction(w, r, jobID, "", err)
 		return
 	}
@@ -68,8 +74,36 @@ func redirectApplicationReviewAction(w http.ResponseWriter, r *http.Request, job
 		q.Set("action_error", msg)
 	}
 	target := "/app/applications/" + url.PathEscape(strings.TrimSpace(jobID))
+	if returnTo := safeApplicationReturnTo(r.PostFormValue("return_to")); returnTo != "" {
+		target = returnTo
+		if enc := q.Encode(); enc != "" {
+			if strings.Contains(target, "?") {
+				target += "&" + enc
+			} else {
+				target += "?" + enc
+			}
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
 	if enc := q.Encode(); enc != "" {
 		target += "?" + enc
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+
+func safeApplicationReturnTo(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.IsAbs() || u.Host != "" {
+		return ""
+	}
+	if u.Path != "/app/applications/review" {
+		return ""
+	}
+	return u.RequestURI()
 }
