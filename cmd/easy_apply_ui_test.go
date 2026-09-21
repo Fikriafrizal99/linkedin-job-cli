@@ -55,6 +55,7 @@ func TestOpenEasyApplyMarksInProgressAndRedirects(t *testing.T) {
 }
 
 func TestMarkEasyApplyAppliedRequiresHumanConfirmation(t *testing.T) {
+	t.Setenv("LJ_SETTINGS_FILE", filepath.Join(t.TempDir(), "missing-settings.yaml"))
 	st, err := store.Open(filepath.Join(t.TempDir(), "easy-applied.db"))
 	if err != nil { t.Fatal(err) }
 	defer st.Close()
@@ -132,5 +133,26 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 	}
 	if strings.Contains(html, "auto-submit") {
 		t.Fatal("Easy Apply UI must not claim or expose auto-submit")
+	}
+}
+
+
+func TestEasyApplyReturnAfterAppliedAdvancesToNextOriginalItem(t *testing.T) {
+	got := easyApplyReturnAfterApplied("/app/applications/easy-apply?ids=a%2Cb%2Cc&pos=1", "b")
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Query().Get("ids") != "a,c" || u.Query().Get("pos") != "1" {
+		t.Fatalf("got %q; expected remaining a,c at c position", got)
+	}
+
+	got = easyApplyReturnAfterApplied("/app/applications/easy-apply?ids=a%2Cb%2Cc&pos=2", "c")
+	u, err = url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Query().Get("ids") != "a,b" || u.Query().Get("pos") != "0" {
+		t.Fatalf("got %q; expected wrap to a", got)
 	}
 }
