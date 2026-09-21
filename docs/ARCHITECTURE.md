@@ -213,11 +213,13 @@ structured LinkedIn metadata
 relative posted age
 ```
 
-If a relative age is converted to a timestamp, set a flag such as:
+If only a relative age is available (for example `3 days ago`), convert it to an approximate UTC timestamp and set:
 
 ```text
 posted_at_estimated = true
 ```
+
+Supported relative units include minutes, hours, days, weeks, months, and years. An exact JSON-LD `datePosted` or `<time datetime>` value always overrides an estimate and resets `posted_at_estimated = false`.
 
 ## Email Extraction
 
@@ -469,6 +471,20 @@ linkedin-jobs auth status
 ```
 
 The import path validates that `li_at` and `JSESSIONID` are present and writes the session to the local cookie file with permission `0600`. Session values should never be committed, logged, or pasted into issue/chat history.
+
+## Collector Integration Testing
+
+The V1 collector has a deterministic local integration test using an HTTP fixture rather than live LinkedIn traffic. It covers:
+
+- anonymous search query parameters;
+- adaptive pagination offsets;
+- card parsing and relative posting-date estimation;
+- full detail/description retrieval;
+- `EMAIL`, `EXTERNAL_URL`, and `LINKEDIN` application classification;
+- structural dedup metadata;
+- SQLite persistence and round-trip reads.
+
+This keeps regression coverage stable without depending on LinkedIn availability or rate limits.
 
 ## External Boundary
 
