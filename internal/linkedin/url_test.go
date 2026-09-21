@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -250,5 +251,78 @@ func TestParseCardCapturesPostedAt(t *testing.T) {
 	}
 	if j.FirstSeen == "" || j.LastSeen == "" || j.ScrapedAt == "" {
 		t.Errorf("collector timestamps missing: %+v", j)
+	}
+}
+
+
+func TestEstimatePostedAtFromText(t *testing.T) {
+	base := time.Date(2026, 9, 21, 2, 30, 0, 0, time.UTC)
+	cases := []struct {
+		text string
+		want string
+	}{
+		{"30 minutes ago", "2026-09-21T02:00:00Z"},
+		{"Posted 2 hours ago", "2026-09-21T00:30:00Z"},
+		{"Reposted 3 days ago", "2026-09-18T02:30:00Z"},
+		{"2 weeks ago", "2026-09-07T02:30:00Z"},
+		{"1 month ago", "2026-08-21T02:30:00Z"},
+		{"1 year ago", "2025-09-21T02:30:00Z"},
+		{"just now", "2026-09-21T02:30:00Z"},
+	}
+	for _, tc := range cases {
+		got, ok := estimatePostedAtFromText(tc.text, base)
+		if !ok {
+			t.Fatalf("%q did not parse", tc.text)
+		}
+		if got != tc.want {
+			t.Errorf("%q => %q, want %q", tc.text, got, tc.want)
+		}
+	}
+	if got, ok := estimatePostedAtFromText("Flexible working hours", base); ok || got != "" {
+		t.Fatalf("non-relative text parsed unexpectedly: %q %v", got, ok)
+	}
+}
+
+func TestParseCardEstimatesPostedAtWhenDatetimeMissing(t *testing.T) {
+	html := `<div data-entity-urn="urn:li:jobPosting:54321">
+		<h3 class="base-search-card__title">Account Executive</h3>
+		<h4 class="base-search-card__subtitle"><a>Acme</a></h4>
+		<span class="job-search-card__location">Jakarta</span>
+		<time>3 days ago</time>
+		<a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/54321/?trk=test">view</a>
+	</div>`
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 9, 21, 2, 30, 0, 0, time.UTC)
+	j := parseCardAt(doc.Find("div[data-entity-urn]").First(), base)
+	if j == nil {
+		t.Fatal("parseCardAt returned nil")
+	}
+	if j.PostedAt != "2026-09-18T02:30:00Z" {
+		t.Fatalf("PostedAt=%q", j.PostedAt)
+	}
+	if !j.PostedAtEstimated {
+		t.Fatal("PostedAtEstimated=false, want true")
+	}
+}
+
+func TestParseCardExactDatetimeIsNotEstimated(t *testing.T) {
+	html := `<div data-entity-urn="urn:li:jobPosting:67890">
+		<h3 class="base-search-card__title">Account Executive</h3>
+		<time datetime="2026-09-20">1 day ago</time>
+		<a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/67890/">view</a>
+	</div>`
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := parseCardAt(doc.Find("div[data-entity-urn]").First(), time.Date(2026, 9, 21, 2, 30, 0, 0, time.UTC))
+	if j.PostedAt != "2026-09-20" {
+		t.Fatalf("PostedAt=%q", j.PostedAt)
+	}
+	if j.PostedAtEstimated {
+		t.Fatal("exact datetime must not be estimated")
 	}
 }
