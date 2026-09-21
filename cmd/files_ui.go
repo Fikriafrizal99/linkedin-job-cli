@@ -121,7 +121,9 @@ func (ws *webServer) handleCVProfileUpload(w http.ResponseWriter, r *http.Reques
 		app.DefaultCVProfile = profileID
 	}
 	if err := config.SaveApplicationSettings(app); err != nil {
-		_ = os.Remove(destPath)
+		if oldPath != destPath {
+			_ = os.Remove(destPath)
+		}
 		redirectCVProfiles(w, r, "", fmt.Errorf("save CV profile: %w", err))
 		return
 	}
