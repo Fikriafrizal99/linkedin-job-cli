@@ -221,6 +221,11 @@ func TestNormalizeImportedCookieHeader(t *testing.T) {
 			in:   "accept: */*\nCookie: li_at=abc; JSESSIONID=\"ajax:123\"\nreferer: https://www.linkedin.com/",
 			want: "li_at=abc; JSESSIONID=\"ajax:123\"",
 		},
+		{
+			name: "wrapped copied cookie header",
+			in:   "accept: */*\nCookie: bcookie=x; li_at=abc;\nJSESSIONID=\"ajax:123\"; lang=v=2&lang=en-us\nreferer: https://www.linkedin.com/",
+			want: "bcookie=x; li_at=abc; JSESSIONID=\"ajax:123\"; lang=v=2&lang=en-us",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
