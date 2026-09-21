@@ -121,7 +121,11 @@ func Detail(w io.Writer, j *models.JobPosting) {
 	fmt.Fprintf(w, "Source:     %s\n", orNA(j.Source))
 	fmt.Fprintf(w, "Status:     %s\n", orNA(j.Status))
 	if j.PostedAt != "" {
-		fmt.Fprintf(w, "Posted:     %s\n", j.PostedAt)
+		if j.PostedAtEstimated {
+			fmt.Fprintf(w, "Posted:     %s (estimated)\n", j.PostedAt)
+		} else {
+			fmt.Fprintf(w, "Posted:     %s\n", j.PostedAt)
+		}
 	}
 	if j.ApplicationMethod != "" {
 		fmt.Fprintf(w, "Apply via:  %s\n", j.ApplicationMethod)
