@@ -248,3 +248,66 @@ func TestPreparationRejectedAfterDraftCreated(t *testing.T) {
 		t.Fatal("expected preparation to reject DRAFT_CREATED")
 	}
 }
+
+
+func TestMigrateApplicationsAddsReviewColumns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-applications.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw: %v", err)
+	}
+	_, err = raw.Exec(`
+CREATE TABLE jobs (
+	id TEXT PRIMARY KEY,
+	title TEXT NOT NULL,
+	url TEXT NOT NULL,
+	searched_at TEXT NOT NULL
+);
+CREATE TABLE applications (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	job_id TEXT NOT NULL UNIQUE,
+	state TEXT NOT NULL,
+	recipient TEXT,
+	subject TEXT,
+	body TEXT,
+	cv_profile TEXT,
+	gmail_draft_id TEXT,
+	last_error TEXT,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	draft_created_at TEXT,
+	sent_at TEXT
+);
+`)
+	if err != nil {
+		raw.Close()
+		t.Fatalf("create legacy schema: %v", err)
+	}
+	raw.Close()
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open migrated DB: %v", err)
+	}
+	defer st.Close()
+
+	rows, err := st.db.Query(`PRAGMA table_info(applications)`)
+	if err != nil {
+		t.Fatalf("table_info: %v", err)
+	}
+	defer rows.Close()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan table_info: %v", err)
+		}
+		cols[name] = true
+	}
+	if !cols["reviewed_at"] || !cols["review_note"] {
+		t.Fatalf("review columns missing after migration: %+v", cols)
+	}
+}
