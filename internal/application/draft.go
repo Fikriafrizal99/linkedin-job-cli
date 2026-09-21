@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"linkedin-jobs/internal/config"
@@ -17,6 +18,10 @@ type DraftPayload struct {
 	ContentType     string   `json:"content_type"`
 	CVProfile       string   `json:"cv_profile"`
 	AttachmentFiles []string `json:"attachment_files,omitempty"`
+	// AttachmentNames optionally overrides the filename shown by the email
+	// provider. It is index-aligned with AttachmentFiles; blank/missing entries
+	// fall back to filepath.Base(path).
+	AttachmentNames []string `json:"attachment_names,omitempty"`
 }
 
 func BuildDraftPayload(app *models.JobApplication, settings config.ApplicationSettings) (DraftPayload, error) {
@@ -68,5 +73,6 @@ func BuildDraftPayload(app *models.JobApplication, settings config.ApplicationSe
 		ContentType:     "text/plain",
 		CVProfile:       strings.TrimSpace(app.CVProfile),
 		AttachmentFiles: []string{cvPath},
+		AttachmentNames: []string{filepath.Base(cvPath)},
 	}, nil
 }
