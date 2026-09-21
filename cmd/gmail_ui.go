@@ -36,9 +36,13 @@ func currentGmailUIState() gmailUIState {
 	if _, err := os.Stat(out.CredentialsPath); err == nil {
 		out.CredentialsFound = true
 	}
-	if tok, err := gmailclient.LoadToken(out.TokenPath); err == nil &&
-		(strings.TrimSpace(tok.AccessToken) != "" || strings.TrimSpace(tok.RefreshToken) != "") {
-		out.Connected = true
+	if out.CredentialsFound {
+		if tok, err := gmailclient.LoadToken(out.TokenPath); err == nil {
+			hasRefresh := strings.TrimSpace(tok.RefreshToken) != ""
+			hasLiveAccess := strings.TrimSpace(tok.AccessToken) != "" &&
+				(tok.Expiry.IsZero() || time.Until(tok.Expiry) > 0)
+			out.Connected = hasRefresh || hasLiveAccess
+		}
 	}
 	return out
 }
@@ -209,7 +213,7 @@ func gmailRedirectURI(r *http.Request) (string, error) {
 }
 
 func redirectGmailSettings(w http.ResponseWriter, r *http.Request, actionErr error, status string) {
-	q := url.Values{}
+	q := url.Values{"tab": {"email"}}
 	if actionErr != nil {
 		msg := actionErr.Error()
 		if len(msg) > 240 {
