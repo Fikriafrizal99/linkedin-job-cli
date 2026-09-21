@@ -22,6 +22,7 @@ var (
 	applicationsPrepareAll    bool
 	applicationsCVProfile     string
 	applicationsDraftID       string
+	applicationsReviewNote     string
 )
 
 var applicationsCmd = &cobra.Command{
@@ -332,6 +333,60 @@ var applicationsRecordDraftCmd = &cobra.Command{
 	},
 }
 
+var applicationsApproveCmd = &cobra.Command{
+	Use:   "approve <job_id>",
+	Short: "Approve a reviewed Gmail draft for explicit send eligibility",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		st, err := openStore()
+		if err != nil {
+			return fmt.Errorf("open DB: %w", err)
+		}
+		defer st.Close()
+
+		a, err := st.ApproveApplication(args[0], applicationsReviewNote)
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			return render.AsJSON(os.Stdout, a)
+		}
+		fmt.Fprintf(os.Stdout, "APPROVED      %s  Gmail draft %s\n", a.JobID, a.GmailDraftID)
+		if a.ReviewNote != "" {
+			fmt.Fprintf(os.Stdout, "Review note:  %s\n", a.ReviewNote)
+		}
+		fmt.Fprintln(os.Stdout, "Approved for explicit send. No email was sent.")
+		return nil
+	},
+}
+
+var applicationsUnapproveCmd = &cobra.Command{
+	Use:   "unapprove <job_id>",
+	Short: "Return an approved draft to DRAFT_CREATED for more review",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		st, err := openStore()
+		if err != nil {
+			return fmt.Errorf("open DB: %w", err)
+		}
+		defer st.Close()
+
+		a, err := st.UnapproveApplication(args[0], applicationsReviewNote)
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			return render.AsJSON(os.Stdout, a)
+		}
+		fmt.Fprintf(os.Stdout, "DRAFT_CREATED  %s  Gmail draft %s\n", a.JobID, a.GmailDraftID)
+		if a.ReviewNote != "" {
+			fmt.Fprintf(os.Stdout, "Review note:  %s\n", a.ReviewNote)
+		}
+		fmt.Fprintln(os.Stdout, "Approval removed. No email was sent.")
+		return nil
+	},
+}
+
 var applicationsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List application queue records",
@@ -415,6 +470,12 @@ var applicationsShowCmd = &cobra.Command{
 		if a.GmailDraftID != "" {
 			fmt.Fprintf(os.Stdout, "Gmail draft: %s\n", a.GmailDraftID)
 		}
+		if a.ReviewedAt != "" {
+			fmt.Fprintf(os.Stdout, "Reviewed at: %s\n", a.ReviewedAt)
+		}
+		if a.ReviewNote != "" {
+			fmt.Fprintf(os.Stdout, "Review note: %s\n", a.ReviewNote)
+		}
 		if a.Body != "" {
 			fmt.Fprintf(os.Stdout, "\nEmail body:\n%s\n", a.Body)
 		}
@@ -437,6 +498,8 @@ func init() {
 	applicationsPrepareCmd.Flags().StringVar(&applicationsCVProfile, "cv-profile", "", "override deterministic CV selection with a configured profile id")
 
 	applicationsRecordDraftCmd.Flags().StringVar(&applicationsDraftID, "draft-id", "", "Gmail draft id returned by the draft provider")
+	applicationsApproveCmd.Flags().StringVar(&applicationsReviewNote, "note", "", "optional manual review note")
+	applicationsUnapproveCmd.Flags().StringVar(&applicationsReviewNote, "note", "", "optional reason for reopening review")
 
 	applicationsListCmd.Flags().IntVar(&applicationsLimit, "limit", 50, "maximum application records to list")
 	applicationsListCmd.Flags().StringVar(&applicationsState, "state", "", "filter by lifecycle state, e.g. READY_EMAIL")
@@ -446,6 +509,8 @@ func init() {
 	applicationsCmd.AddCommand(applicationsProfilesCmd)
 	applicationsCmd.AddCommand(applicationsDraftPayloadCmd)
 	applicationsCmd.AddCommand(applicationsRecordDraftCmd)
+	applicationsCmd.AddCommand(applicationsApproveCmd)
+	applicationsCmd.AddCommand(applicationsUnapproveCmd)
 	applicationsCmd.AddCommand(applicationsListCmd)
 	applicationsCmd.AddCommand(applicationsShowCmd)
 	rootCmd.AddCommand(applicationsCmd)
