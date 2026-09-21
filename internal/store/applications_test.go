@@ -162,3 +162,89 @@ func TestMarkApplicationDraftCreatedRequiresPreparedReadyEmail(t *testing.T) {
 		t.Fatal("expected unprepared error")
 	}
 }
+
+
+func TestApproveAndUnapproveApplication(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-review-gate")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil {
+		t.Fatalf("SaveApplicationPreparation: %v", err)
+	}
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "draft-review"); err != nil {
+		t.Fatalf("MarkApplicationDraftCreated: %v", err)
+	}
+
+	approved, err := st.ApproveApplication(j.ID, "Reviewed in Gmail")
+	if err != nil {
+		t.Fatalf("ApproveApplication: %v", err)
+	}
+	if approved.State != models.ApplicationStateApproved {
+		t.Fatalf("state=%q want APPROVED", approved.State)
+	}
+	if approved.ReviewedAt == "" || approved.ReviewNote != "Reviewed in Gmail" {
+		t.Fatalf("review metadata missing: %+v", approved)
+	}
+	if approved.GmailDraftID != "draft-review" {
+		t.Fatalf("draft lost: %+v", approved)
+	}
+
+	reopened, err := st.UnapproveApplication(j.ID, "Need wording changes")
+	if err != nil {
+		t.Fatalf("UnapproveApplication: %v", err)
+	}
+	if reopened.State != models.ApplicationStateDraftCreated {
+		t.Fatalf("state=%q want DRAFT_CREATED", reopened.State)
+	}
+	if reopened.ReviewedAt != "" || reopened.ReviewNote != "Need wording changes" {
+		t.Fatalf("unexpected reopened review metadata: %+v", reopened)
+	}
+	if reopened.GmailDraftID != "draft-review" {
+		t.Fatalf("draft should remain attached: %+v", reopened)
+	}
+}
+
+func TestApproveApplicationRequiresDraftCreated(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-approve-too-early")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if _, err := st.ApproveApplication(j.ID, "too early"); err == nil {
+		t.Fatal("expected approval to reject READY_EMAIL")
+	}
+}
+
+func TestPreparationRejectedAfterDraftCreated(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-no-reprepare")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil {
+		t.Fatalf("SaveApplicationPreparation: %v", err)
+	}
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "draft-1"); err != nil {
+		t.Fatalf("MarkApplicationDraftCreated: %v", err)
+	}
+	if _, err := st.SaveApplicationPreparation(j.ID, "Changed", "Changed body", "general"); err == nil {
+		t.Fatal("expected preparation to reject DRAFT_CREATED")
+	}
+}
