@@ -25,14 +25,32 @@ type DraftPayload struct {
 }
 
 func BuildDraftPayload(app *models.JobApplication, settings config.ApplicationSettings) (DraftPayload, error) {
+	return buildDraftPayload(app, settings, false)
+}
+
+// BuildRecreateDraftPayload validates the existing prepared content for an
+// explicit recovery action after a Gmail draft was deleted or otherwise became
+// unusable. Only DRAFT_CREATED and APPROVED records are eligible; SENT is never
+// recoverable through draft recreation.
+func BuildRecreateDraftPayload(app *models.JobApplication, settings config.ApplicationSettings) (DraftPayload, error) {
+	return buildDraftPayload(app, settings, true)
+}
+
+func buildDraftPayload(app *models.JobApplication, settings config.ApplicationSettings, recreate bool) (DraftPayload, error) {
 	if app == nil {
 		return DraftPayload{}, fmt.Errorf("nil application")
 	}
-	if app.State != models.ApplicationStateReadyEmail {
-		return DraftPayload{}, fmt.Errorf("application state is %s; expected READY_EMAIL", app.State)
-	}
-	if strings.TrimSpace(app.GmailDraftID) != "" {
-		return DraftPayload{}, fmt.Errorf("application already has Gmail draft %s", app.GmailDraftID)
+	if recreate {
+		if app.State != models.ApplicationStateDraftCreated && app.State != models.ApplicationStateApproved {
+			return DraftPayload{}, fmt.Errorf("application state is %s; expected DRAFT_CREATED or APPROVED", app.State)
+		}
+	} else {
+		if app.State != models.ApplicationStateReadyEmail {
+			return DraftPayload{}, fmt.Errorf("application state is %s; expected READY_EMAIL", app.State)
+		}
+		if strings.TrimSpace(app.GmailDraftID) != "" {
+			return DraftPayload{}, fmt.Errorf("application already has Gmail draft %s", app.GmailDraftID)
+		}
 	}
 	if strings.TrimSpace(app.Recipient) == "" {
 		return DraftPayload{}, fmt.Errorf("application recipient is empty")
