@@ -158,7 +158,7 @@ The visual design must be backed by the existing repository workflow rather than
 
 ## Safety / product constraints
 
-- `Send (Optional)` remains an explicit, manual action.
+- `Send` remains a separate explicit/manual phase and is not wired by the review UI.
 - Never auto-send email.
 - Never auto-apply on LinkedIn.
 - Never auto-DM or auto-connect.
@@ -188,7 +188,7 @@ The repository now contains the first implementation of the complete page family
 - `/app/collect`
 - `/app/settings`
 
-Dashboard, Jobs, Applications, CV Profiles, and Settings are populated from the existing SQLite/config data. Application send/review buttons and collector execution remain intentionally disabled in this UI phase until their POST endpoints are wired to the already-tested lifecycle guards.
+Dashboard, Jobs, Applications, CV Profiles, and Settings are populated from the existing SQLite/config data. Later Phase 3 work wires collector, preparation, Gmail draft creation, CV/file management, and manual review actions to the existing lifecycle guards. Sending remains a separate explicit phase.
 
 The former server-rendered jobs browser is retained at `/legacy` during migration so existing filtering/status/delete regression coverage is not discarded.
 
@@ -312,6 +312,30 @@ Gmail OAuth connection and native Gmail draft creation have been live-validated 
 Draft polish now keeps managed storage IDs out of the outgoing MIME filename. Optional supporting files use a human-readable Gmail filename derived from the candidate name + attachment label, and the email body changes from “CV attached” to “CV and portfolio/supporting documents attached” when optional files are selected. This polish is implemented and pending live re-validation.
 
 See `docs/GMAIL_SETUP.md` for setup instructions.
+
+### Manual Review / Approval UI — implemented, pending live validation
+
+Application Detail now exposes real review actions backed by the existing store lifecycle:
+
+```text
+POST /app/applications/<job_id>/approve
+POST /app/applications/<job_id>/unapprove
+```
+
+Behavior:
+
+- only a real `DRAFT_CREATED` application can be approved;
+- the UI requires an explicit “I reviewed the Gmail draft…” confirmation;
+- an optional review note is persisted (maximum 500 characters);
+- approval records `reviewed_at` and advances `DRAFT_CREATED → APPROVED`;
+- approval does not send email;
+- an approved application can be explicitly reopened with `Unapprove & Reopen Review`;
+- unapprove keeps the existing Gmail draft ID and returns `APPROVED → DRAFT_CREATED`;
+- no send POST action is exposed by this phase.
+
+This UI wiring is implemented and covered by regression tests, but still requires live browser validation.
+
+
 
 ## Reference assets
 
