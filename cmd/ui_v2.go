@@ -25,6 +25,7 @@ type appStats struct {
 	EmailTotal      int
 	PipelineTotal   int
 	SentTotal       int
+	CompletedTotal  int
 	ReadyTotal      int
 	EasyReadyTotal  int
 	InProgressTotal int
@@ -607,6 +608,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.Stats.SentTotal++
 		}
 	}
+	pd.Stats.CompletedTotal = pd.Stats.SentTotal + pd.Stats.AppliedTotal
 
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/app"), "/")
 	parts := []string{}

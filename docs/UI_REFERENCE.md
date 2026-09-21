@@ -21,7 +21,7 @@ The Dashboard WebP remains the detailed **1:1 desktop fidelity reference** at 15
 The UI implementation should contain these screens in this order:
 
 1. **Dashboard**
-   - KPI cards: Jobs Collected, With Email Contact, Application Pipeline, Applications Sent.
+   - KPI cards: Jobs Collected, With Email Contact, Application Pipeline, Completed Applications (email SENT + LinkedIn APPLIED).
    - Recent Jobs table with job/company/status scanning.
    - Next actions panel: email review, preparation, manual Easy Apply, approved work and destination problems.
    - Quick Actions.

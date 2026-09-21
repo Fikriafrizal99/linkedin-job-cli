@@ -49,7 +49,7 @@ func TestAppTemplateHasCanonicalNavigation(t *testing.T) {
 		"Jobs Collected",
 		"With Email Contact",
 		"In Application Pipeline",
-		"Applications Sent",
+		"Completed Applications",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered app missing %q", want)
