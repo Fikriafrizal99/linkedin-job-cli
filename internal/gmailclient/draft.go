@@ -33,6 +33,10 @@ type gmailDraftResponse struct {
 }
 
 func CreateDraft(ctx context.Context, client *http.Client, creds Credentials, tokenPath string, payload appengine.DraftPayload) (DraftResult, error) {
+	return createDraftAt(ctx, client, creds, tokenPath, payload, "https://gmail.googleapis.com/gmail/v1/users/me/drafts")
+}
+
+func createDraftAt(ctx context.Context, client *http.Client, creds Credentials, tokenPath string, payload appengine.DraftPayload, endpoint string) (DraftResult, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -53,7 +57,7 @@ func CreateDraft(ctx context.Context, client *http.Client, creds Credentials, to
 	if err != nil {
 		return DraftResult{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://gmail.googleapis.com/gmail/v1/users/me/drafts", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return DraftResult{}, err
 	}
