@@ -443,3 +443,56 @@ func TestReplaceApplicationDraftRejectsSent(t *testing.T) {
 		t.Fatal("expected SENT draft recreation to be rejected")
 	}
 }
+
+
+func TestRemoveApplicationKeepsJobAndRemovesPreDraftRecord(t *testing.T) {
+	st := tmpDB(t)
+
+	emailJob := sampleJob("app-remove-ready")
+	emailJob.ApplicationMethod = "EMAIL"
+	emailJob.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(emailJob); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(emailJob.ID); err != nil { t.Fatal(err) }
+	if _, err := st.SaveApplicationPreparation(emailJob.ID, "Subject", "Body", "general"); err != nil { t.Fatal(err) }
+
+	if err := st.RemoveApplication(emailJob.ID); err != nil {
+		t.Fatalf("RemoveApplication READY_EMAIL: %v", err)
+	}
+	if app, err := st.GetApplicationByJobID(emailJob.ID); err != nil || app != nil {
+		t.Fatalf("application should be removed, app=%+v err=%v", app, err)
+	}
+	if job, err := st.Get(emailJob.ID); err != nil || job == nil {
+		t.Fatalf("collected job must remain, job=%+v err=%v", job, err)
+	}
+
+	reviewJob := sampleJob("app-remove-review")
+	reviewJob.ApplicationMethod = "UNKNOWN"
+	if err := st.Upsert(reviewJob); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(reviewJob.ID); err != nil { t.Fatal(err) }
+	if err := st.RemoveApplication(reviewJob.ID); err != nil {
+		t.Fatalf("RemoveApplication NEED_REVIEW: %v", err)
+	}
+	if app, err := st.GetApplicationByJobID(reviewJob.ID); err != nil || app != nil {
+		t.Fatalf("NEED_REVIEW application should be removed, app=%+v err=%v", app, err)
+	}
+}
+
+func TestRemoveApplicationRejectsDraftCreatedAndLater(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-remove-protected")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(j.ID); err != nil { t.Fatal(err) }
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil { t.Fatal(err) }
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "draft-protected"); err != nil { t.Fatal(err) }
+
+	if err := st.RemoveApplication(j.ID); err == nil {
+		t.Fatal("expected DRAFT_CREATED removal to be rejected")
+	}
+	app, err := st.GetApplicationByJobID(j.ID)
+	if err != nil { t.Fatal(err) }
+	if app == nil || app.State != models.ApplicationStateDraftCreated || app.GmailDraftID != "draft-protected" {
+		t.Fatalf("protected application changed: %+v", app)
+	}
+}
