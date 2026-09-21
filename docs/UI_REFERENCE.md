@@ -27,10 +27,13 @@ The UI implementation should contain these screens in this order:
 
 2. **Jobs**
    - Search and filter toolbar.
-   - Full collected-jobs table.
-   - Filters for location, method, status, date, and other existing collector metadata.
-   - Row selection opens or navigates to Job Detail.
-   - Pagination uses the same density as the Dashboard table.
+   - Full collected-jobs database table.
+   - Filters for location, method, application state, and collector metadata.
+   - Multi-select with **Select all visible**.
+   - Batch actions: **Queue Selected** and **Process Selected to Draft**.
+   - The Apply cell combines application method with explicit recipient visibility so missing-email records are recognizable before processing.
+   - Process Selected to Draft stops at `DRAFT_CREATED` and redirects eligible records to Review Queue; it never approves or sends.
+   - Row title navigation still opens Job Detail for one-record inspection.
 
 3. **Job Detail**
    - Job title, company, location, posted date, application method, LinkedIn job id.
@@ -363,6 +366,54 @@ Behavior:
 - approval itself exposes no send side effect; sending remains a separate explicit confirmation flow.
 
 This UI wiring is covered by regression tests and has been live-validated in the user's local browser.
+
+### Jobs Database Bulk Intake — implemented, pending live validation
+
+The collected Jobs page now supports direct multi-record intake into the application workflow.
+
+Routes:
+
+```text
+POST /app/jobs/bulk/queue
+POST /app/jobs/bulk/process-to-draft
+```
+
+Behavior:
+
+- **Select all visible** selects only records currently rendered after filters;
+- **Queue Selected** creates application records without opening Job Detail one by one;
+- **Process Selected to Draft** chains Queue → deterministic Prepare → Gmail Draft for eligible records;
+- Gmail-facing processing is capped at 25 selected jobs, while queue-only batches allow up to 50;
+- jobs without an explicit email stop safely at `NEED_REVIEW`;
+- existing `DRAFT_CREATED` applications are reused and included in the resulting Review Queue instead of creating duplicate drafts;
+- `APPROVED` and `SENT` records are skipped;
+- optional supporting-file selection is shared across drafts created by the batch;
+- the browser redirects directly into Review Queue when at least one selected item is reviewable;
+- no approval or email send occurs in this workflow.
+
+This phase is covered by regression tests and is pending live browser validation.
+
+### UI Hierarchy & Usability Audit — implemented, pending live validation
+
+The shared UI was audited for information hierarchy, density, card sizing, action placement, and responsive behavior.
+
+Implemented refinements:
+
+- page titles now use a stronger visual level than page subtitles, with subtitles constrained to readable width;
+- success/error feedback appears after the page heading so the page identity remains the first visual anchor;
+- card headings, detail headings, labels, and metadata now use distinct type scales rather than competing sizes;
+- content cards and panels use consistent padding, radius, border treatment, and restrained shadow depth;
+- CV cards no longer enforce an unnecessarily tall minimum height;
+- two-column detail pages and supporting grids align to the top instead of stretching cards vertically;
+- tables allow job/company text to wrap while keeping operational metadata compact;
+- selected batch rows receive a visible selected state;
+- Jobs and Applications batch actions are grouped into a primary action row with secondary explanatory text below;
+- filter toolbars wrap predictably at narrower widths;
+- mobile/tablet layouts stack bulk actions and review navigation rather than compressing controls;
+- Review Queue progress/navigation is visually separated from email content;
+- duplicated page/card naming on CV Profiles was reduced (`CV Profiles` page → `Primary CV Library` content section).
+
+These refinements keep the existing dark command-center visual system; they do not introduce a new visual identity.
 
 ### Application Workbench + Batch Workflow — batch flow live validated / explicit send pending live validation
 
