@@ -46,6 +46,8 @@ var (
 	loginViaBrowser   = auth.LoginViaBrowser
 )
 
+var authStatusLive bool
+
 var authStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show whether a usable session is available",
@@ -83,7 +85,15 @@ var authStatusCmd = &cobra.Command{
 			fmt.Println("This usually means the session is stale — re-run `linkedin-jobs auth login`.")
 			return nil
 		}
-		fmt.Printf("Session available (recommended jobs enabled) [source: %s].\n", sessionSourceLabel(sess.Source))
+		if !authStatusLive {
+			fmt.Printf("Session structurally complete [source: %s]. Run 'linkedin-jobs auth status --live' to verify LinkedIn accepts it.\n", sessionSourceLabel(sess.Source))
+			return nil
+		}
+		if err := c.ProbeSession(); err != nil {
+			fmt.Printf("Session structurally complete but live verification failed [source: %s]: %v\n", sessionSourceLabel(sess.Source), err)
+			return nil
+		}
+		fmt.Printf("Session live-verified and accepted by LinkedIn [source: %s].\n", sessionSourceLabel(sess.Source))
 		return nil
 	},
 }
@@ -239,6 +249,7 @@ func cookiesWritePath() string {
 }
 
 func init() {
+	authStatusCmd.Flags().BoolVar(&authStatusLive, "live", false, "verify the session with one authenticated LinkedIn Voyager request")
 	authCmd.AddCommand(authStatusCmd)
 	authCmd.AddCommand(authLoginCmd)
 	authCmd.AddCommand(authImportCmd)
