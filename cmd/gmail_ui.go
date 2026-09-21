@@ -172,12 +172,20 @@ func (ws *webServer) handleAppCreateGmailDraft(w http.ResponseWriter, r *http.Re
 		redirectApplicationAction(w, r, jobID, err)
 		return
 	}
-	extraPaths, err := resolveAttachmentPaths(settings.Application.Attachments, r.PostForm["attachment"])
+	extraAttachments, err := resolveAttachments(
+		settings.Application.Attachments,
+		r.PostForm["attachment"],
+		settings.Application.CandidateName,
+	)
 	if err != nil {
 		redirectApplicationAction(w, r, jobID, err)
 		return
 	}
-	payload.AttachmentFiles = append(payload.AttachmentFiles, extraPaths...)
+	for _, attachment := range extraAttachments {
+		payload.AttachmentFiles = append(payload.AttachmentFiles, attachment.Path)
+		payload.AttachmentNames = append(payload.AttachmentNames, attachment.Name)
+	}
+	payload.Body = draftBodyForAttachments(payload.Body, extraAttachments)
 	if err := validateDraftAttachmentTotal(payload.AttachmentFiles, 18<<20); err != nil {
 		redirectApplicationAction(w, r, jobID, err)
 		return
