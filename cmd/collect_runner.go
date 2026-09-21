@@ -28,6 +28,7 @@ type collectRunResult struct {
 	ExactDuplicates  int      `json:"exact_duplicates"`
 	LikelyReposts    int      `json:"likely_reposts"`
 	JobIDs           []string `json:"job_ids,omitempty"`
+	Jobs             []*models.JobPosting `json:"-"`
 }
 
 type collectProgressFunc func(stage string, done, total int)
@@ -81,6 +82,7 @@ func runCollect(req collectRequest, st *store.Store, progress collectProgressFun
 		}
 	}
 	result.NewCandidates = len(target)
+	result.Jobs = target
 	if len(target) == 0 {
 		return result, nil
 	}
