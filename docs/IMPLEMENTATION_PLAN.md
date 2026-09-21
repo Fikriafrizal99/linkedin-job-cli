@@ -61,7 +61,7 @@ Future project/module:
 - [x] deterministic subject/body generation and persistence;
 - [x] Gmail draft creation through an external Gmail draft provider bridge;
 - [x] explicit manual review/approval gate;
-- [ ] explicit send;
+- [x] explicit-send bridge gated by APPROVED state;
 - [ ] application tracking/follow-up.
 
 ### P3.1 — Queue Foundation
@@ -160,6 +160,44 @@ DRAFT_CREATED
 Approval records `reviewed_at` and optional `review_note`. Re-queueing preserves `DRAFT_CREATED`, `APPROVED`, and `SENT`. Once a Gmail draft exists, `applications prepare` cannot silently replace the local subject/body/CV; draft revisions must be handled explicitly so the database cannot drift from the provider draft.
 
 No command in this stage sends email.
+
+### P3.5 — Explicit Send Bridge
+
+Sending is deliberately split into validation, provider action, and persistence:
+
+```bash
+linkedin-jobs applications send-request <job_id>
+linkedin-jobs applications send-request <job_id> --json
+```
+
+The request is emitted only when the application is `APPROVED` and still references a Gmail draft. The external Gmail provider may then execute `send_draft` only after an explicit send request from the user. After Gmail returns the sent message/thread identifiers:
+
+```bash
+linkedin-jobs applications record-sent <job_id> \
+  --message-id <gmail_message_id> \
+  --thread-id <gmail_thread_id>
+```
+
+The state transition is:
+
+```text
+APPROVED
+    |
+    | explicit user-authorized Gmail send_draft
+    v
+SENT
+```
+
+Safety rules:
+
+- `DRAFT_CREATED` cannot be sent; it must first pass manual approval;
+- `send-request` does not send anything itself;
+- only a real provider result can advance the local record to `SENT`;
+- repeated recording of the same Gmail message id is idempotent;
+- conflicting second message ids are rejected;
+- `gmail_message_id`, `gmail_thread_id`, and `sent_at` are persisted for follow-up tracking.
+
+The bridge is implemented; live sending remains user-authorized per application.
 
 ## Explicitly Deferred
 
