@@ -41,6 +41,8 @@ func (c *Client) HasSession() bool { return c.session != nil && c.session.Cookie
 // ErrAuthRequired is returned when an authenticated call is made without a session.
 var ErrAuthRequired = errors.New("authenticated call requires a LinkedIn session: run `linkedin-jobs auth login` to capture one")
 
+var sessionProbeEndpoint = "https://www.linkedin.com/voyager/api/me"
+
 // ProbeSession performs one lightweight authenticated Voyager request without
 // following redirects. It distinguishes a structurally complete cookie set
 // from a session LinkedIn actually accepts. It does not attempt to bypass
@@ -50,7 +52,7 @@ func (c *Client) ProbeSession() error {
 		return ErrAuthRequired
 	}
 
-	req, err := http.NewRequest(http.MethodGet, "https://www.linkedin.com/voyager/api/me", nil)
+	req, err := http.NewRequest(http.MethodGet, sessionProbeEndpoint, nil)
 	if err != nil {
 		return err
 	}
