@@ -785,6 +785,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 .alert{padding:10px 13px;border:1px solid #6e4b25;background:#382919;color:#f1c178;border-radius:8px;margin-bottom:14px}.alert.success{border-color:#1f664d;background:#123a2e;color:#79ddb5}.collect-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:14px}.collect-summary .mini{background:#13283f;border:1px solid #29465f;border-radius:8px;padding:10px}.collect-summary b{display:block;font-size:18px}.collect-summary span{color:#8fa4bc;font-size:10px}
 .pipeline-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}.pipeline-mini{background:#10243a;border:1px solid #223d58;border-radius:10px;padding:12px 14px}.pipeline-mini b{font-size:20px;display:block}.pipeline-mini span{font-size:11px;color:#8fa4bc}.footer-note{color:#637991;font-size:11px;margin-top:14px}
 .upload-form{margin-top:14px}.checkline{display:flex;align-items:center;gap:9px;color:#b7c6d8;font-size:12px;margin-top:12px}.checkline input{width:auto}.inline-actions{display:flex;gap:8px;align-items:center;margin-top:14px}.inline-actions form{margin:0}.file-list{display:grid;gap:9px;margin-top:16px}.file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #29465f;border-radius:9px;background:#10243a}.file-card strong{display:block}.file-card small{display:block;color:#7f94ad;margin-top:3px;word-break:break-all}.attachment-picker{display:grid;gap:8px;margin-top:7px}.attachment-option{margin:0;padding:10px 12px;border:1px solid #29465f;border-radius:8px;background:#10243a}.attachment-option span{display:block}.attachment-option b,.attachment-option small{display:block}.attachment-option small{color:#7f94ad;margin-top:2px}
+.bulk-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 14px;background:#10243a;border:1px solid #29465f;border-radius:10px;margin-bottom:12px}.bulk-bar .spacer{flex:1}.bulk-attachments{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;padding-top:8px;border-top:1px solid #203b55}.bulk-attachments .checkline{margin:0}.row-check{width:16px;height:16px}.review-progress{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.review-counter{font-weight:700}.review-nav{display:flex;gap:8px}.send-confirm-table td:first-child{white-space:normal}.danger-zone{border:1px solid #6f3540;background:#321d24;border-radius:10px;padding:14px;margin-top:16px}.danger-zone .checkline{color:#ffd8dc}.batch-note{font-size:11px;color:#91a5bc}
 @media(max-width:1400px) and (min-width:1051px){.main{padding-top:calc(var(--top) + 20px)}.page-head{margin-bottom:16px}.grid-kpi{gap:12px;margin-bottom:14px}.kpi{min-height:96px;padding:15px}.panel-head{height:54px}.detail{padding:16px}.email-body{min-height:145px}}
 @media(max-width:1050px){.grid-kpi{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.two-col,.collect-grid{grid-template-columns:1fr}.cv-grid{grid-template-columns:1fr 1fr}.quick-actions{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){:root{--sidebar:0px}.sidebar{display:none}.topbar{left:0}.main{margin-left:0;padding-left:14px;padding-right:14px}.grid-kpi,.cv-grid,.form-grid,.detail-grid{grid-template-columns:1fr}.top-user .name{display:none}.global-search{width:70vw}}
@@ -885,7 +886,49 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   {{end}}
 
   {{if eq .Active "applications"}}
-    {{if .SelectedApplication}}
+    {{if .SendConfirmMode}}
+      <section class="content-card"><div class="content-pad">
+        <div class="detail-title"><div><h2>Final Send Confirmation</h2><p class="muted">Only APPROVED Gmail drafts are listed below. This is the final step that will actually send email.</p></div><span class="badge state-approved">{{len .SendCandidates}} READY TO SEND</span></div>
+        <form method="post" action="/app/applications/bulk/send" style="margin-top:16px">
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <div class="table-wrap"><table class="send-confirm-table"><thead><tr><th>Application</th><th>Recipient</th><th>Subject</th><th>Draft</th></tr></thead><tbody>
+          {{range .SendCandidates}}
+            <tr>
+              <td><strong>{{.Title}}</strong><div class="muted">{{.Company}} · {{.JobID}}</div><input type="hidden" name="job_id" value="{{.JobID}}"></td>
+              <td>{{.Recipient}}</td><td>{{.Subject}}</td><td class="muted">{{.DraftID}}</td>
+            </tr>
+          {{end}}
+          </tbody></table></div>
+          <div class="danger-zone">
+            <strong>This action sends the emails above through Gmail.</strong>
+            <label class="checkline"><input type="checkbox" name="send_confirm" value="1" required> I confirm these approved applications are ready to be sent.</label>
+            <div class="detail-actions"><a class="btn ghost" href="/app/applications">Cancel</a><button class="btn primary" type="submit">Send {{len .SendCandidates}} Application(s)</button></div>
+          </div>
+        </form>
+      </div></section>
+    {{else if .ReviewMode}}
+      {{if .SelectedApplication}}
+        <section class="content-card"><div class="content-pad">
+          <div class="review-progress"><div><span class="review-counter">Review {{.ReviewPosition}} of {{.ReviewTotal}}</span><div class="muted">Approve &amp; Next keeps you in this queue.</div></div><div class="review-nav"><a class="btn ghost" id="review-prev" href="{{.ReviewPrevURL}}">← Previous</a><a class="btn ghost" id="review-next" href="{{.ReviewNextURL}}">Skip / Next →</a></div></div>
+          <div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Application{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span class="badge state-draft_created">DRAFT_CREATED</span></div>
+          <div class="form-grid"><div><div class="field-label">To</div><div class="field">{{.SelectedApplication.Recipient}}</div></div><div><div class="field-label">CV Profile</div><div class="field">{{.SelectedApplication.CVProfile}}</div></div></div>
+          <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
+          <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
+          <div class="detail-grid" style="margin-top:14px"><div class="info-card"><h3>Gmail Draft</h3><div class="info-row"><span>Draft ID</span><b>{{.SelectedApplication.GmailDraftID}}</b></div><div class="info-row"><span>Created</span><b>{{.SelectedApplication.DraftCreatedAt}}</b></div></div><div class="info-card"><h3>Review Gate</h3><div class="info-row"><span>Current state</span><b>DRAFT_CREATED</b></div><div class="info-row"><span>Email sent</span><b>No</b></div></div></div>
+          <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a></div>
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/approve" style="margin-top:14px">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <input type="hidden" name="return_to" value="{{.ReviewStayURL}}">
+            <div class="form-group"><label>Review Note <span class="muted">(optional)</span></label><textarea name="review_note" maxlength="500" rows="3" placeholder="Recipient, subject, body and attachments checked in Gmail."></textarea></div>
+            <label class="checkline"><input type="checkbox" name="review_confirm" value="1" required> I reviewed the Gmail draft, recipient, email content, and attachments.</label>
+            <div class="detail-actions"><a class="btn ghost" href="{{.ReviewNextURL}}">Skip</a><button class="btn primary" type="submit">Approve &amp; Next</button></div>
+          </form>
+          <div class="footer-note">Keyboard: J / → next, K / ← previous. Approval never sends email.</div>
+        </div></section>
+      {{else}}
+        <section class="content-card"><div class="empty">No DRAFT_CREATED applications remain in this review queue. <a class="job-link" href="/app/applications">Back to Applications</a></div></section>
+      {{end}}
+    {{else if .SelectedApplication}}
       <div class="content-card"><div class="content-pad"><div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Application{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
         <div class="tabs"><span class="tab active">Email</span><span class="tab">CV &amp; Files</span><span class="tab">Timeline</span><span class="tab">Notes</span></div>
         <div class="form-grid"><div><div class="field-label">To</div><div class="field">{{.SelectedApplication.Recipient}}</div></div><div><div class="field-label">CV Profile</div><div class="field">{{.SelectedApplication.CVProfile}}</div></div></div>
@@ -943,7 +986,8 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
             <div class="info-card"><h3>Manual Review</h3><div class="info-row"><span>Reviewed at</span><b>{{.SelectedApplication.ReviewedAt}}</b></div><div class="info-row"><span>Review note</span><b>{{if .SelectedApplication.ReviewNote}}{{.SelectedApplication.ReviewNote}}{{else}}—{{end}}</b></div></div>
             <div class="info-card"><h3>Send Gate</h3><div class="info-row"><span>Status</span><b>APPROVED</b></div><div class="info-row"><span>Email sent</span><b>No</b></div></div>
           </div>
-          <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a><button class="btn primary" disabled>Send (separate phase)</button></div>
+          <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a></div>
+          <form method="post" action="/app/applications/send-confirm" style="margin-top:10px"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="job_id" value="{{.SelectedApplication.JobID}}"><button class="btn primary" type="submit" style="width:100%">Review &amp; Send Application</button></form>
           <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/unapprove" style="margin-top:14px" onsubmit="return confirm('Return this application to DRAFT_CREATED for more review?')">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <div class="form-group"><label>Reason for reopening <span class="muted">(optional)</span></label><textarea name="review_note" maxlength="500" rows="2" placeholder="e.g. Need to revise the Gmail draft before sending."></textarea></div>
@@ -973,9 +1017,23 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{.}}</option>{{end}}</select>
         <button class="btn primary" type="submit">Apply</button><a class="btn ghost" href="/app/applications">Reset</a>
       </form>
-      <div class="content-card"><div class="table-wrap"><table><thead><tr><th>Job Title</th><th>Company</th><th>Method</th><th>Status</th><th>Recipient</th><th>Updated</th></tr></thead><tbody>
-      {{range .Applications}}<tr><td><a class="job-link" href="/app/applications/{{.JobID}}">{{.Title}}</a></td><td>{{.Company}}</td><td><span class="badge method-{{lower .Method}}">{{.Method}}</span></td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Recipient}}</td><td class="muted">{{.Updated}}</td></tr>{{end}}
-      </tbody></table></div>{{if not .Applications}}<div class="empty">No applications queued yet.</div>{{end}}</div>
+      <form method="post" id="bulk-app-form">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <div class="bulk-bar">
+          <label class="checkline" style="margin:0"><input id="select-all-apps" type="checkbox"> Select all visible</label>
+          <span id="selected-count" class="batch-note">0 selected</span>
+          <div class="spacer"></div>
+          <button class="btn ghost" type="submit" formaction="/app/applications/bulk/prepare">Prepare Selected</button>
+          <button class="btn ghost" type="submit" formaction="/app/applications/bulk/draft">Create Drafts</button>
+          <button class="btn ghost" type="submit" formaction="/app/applications/bulk/review">Review Selected</button>
+          <button class="btn primary" type="submit" formaction="/app/applications/send-confirm">Confirm Send</button>
+          <a class="btn ghost" href="/app/applications/review">Review Draft Queue ({{.Stats.DraftTotal}})</a>
+          {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for batch draft creation:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
+        </div>
+        <div class="content-card"><div class="table-wrap"><table><thead><tr><th style="width:42px"></th><th>Job Title</th><th>Company</th><th>Method</th><th>Status</th><th>Preparation</th><th>Recipient</th><th>Updated</th></tr></thead><tbody>
+        {{range .Applications}}<tr><td><input class="row-check js-app-check" type="checkbox" name="job_id" value="{{.JobID}}"></td><td><a class="job-link" href="/app/applications/{{.JobID}}">{{.Title}}</a></td><td>{{.Company}}</td><td><span class="badge method-{{lower .Method}}">{{.Method}}</span></td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td>{{if .Prepared}}<span class="badge state-approved">PREPARED</span>{{else}}<span class="muted">Not prepared</span>{{end}}</td><td class="muted">{{.Recipient}}</td><td class="muted">{{.Updated}}</td></tr>{{end}}
+        </tbody></table></div>{{if not .Applications}}<div class="empty">No applications queued yet.</div>{{end}}</div>
+      </form>
     {{end}}
   {{end}}
 
@@ -1135,6 +1193,16 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   [k,l,p,t].forEach(function(el){if(el){el.addEventListener('input',update);el.addEventListener('change',update)}}); update();
   var form=document.getElementById('collect-form'), submit=document.getElementById('collect-submit');
   if(form&&submit){form.addEventListener('submit',function(){submit.disabled=true;submit.textContent='Collecting…';});}
+  var selectAll=document.getElementById('select-all-apps'), appChecks=Array.prototype.slice.call(document.querySelectorAll('.js-app-check')), selectedCount=document.getElementById('selected-count');
+  function updateSelected(){var n=appChecks.filter(function(x){return x.checked}).length;if(selectedCount)selectedCount.textContent=n+' selected';if(selectAll){selectAll.checked=n>0&&n===appChecks.length;selectAll.indeterminate=n>0&&n<appChecks.length;}}
+  if(selectAll){selectAll.addEventListener('change',function(){appChecks.forEach(function(x){x.checked=selectAll.checked});updateSelected();});}
+  appChecks.forEach(function(x){x.addEventListener('change',updateSelected)});updateSelected();
+  var reviewNext=document.getElementById('review-next'), reviewPrev=document.getElementById('review-prev');
+  document.addEventListener('keydown',function(e){
+    if(e.target&&/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+    if((e.key==='j'||e.key==='J'||e.key==='ArrowRight')&&reviewNext){window.location.href=reviewNext.href;}
+    if((e.key==='k'||e.key==='K'||e.key==='ArrowLeft')&&reviewPrev){window.location.href=reviewPrev.href;}
+  });
 })();
 </script>
 </body>
