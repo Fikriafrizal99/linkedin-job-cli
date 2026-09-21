@@ -1077,7 +1077,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
     {{else if .ReviewMode}}
       {{if .SelectedApplication}}
         <section class="content-card"><div class="content-pad">
-          <div class="review-progress"><div><span class="review-counter">Review {{.ReviewPosition}} of {{.ReviewTotal}}</span><div class="muted">Approve &amp; Next keeps you in this queue.</div></div><div class="review-nav"><a class="btn ghost" id="review-prev" href="{{.ReviewPrevURL}}">← Previous</a><a class="btn ghost" id="review-next" href="{{.ReviewNextURL}}">Skip / Next →</a></div></div>
+          <div class="review-progress"><div><span class="review-counter">Review {{.ReviewPosition}} of {{.ReviewTotal}}</span><div class="muted">Approve &amp; Next keeps you in this queue.</div>{{if .EasyApplyBatchURL}}<div style="margin-top:7px"><a class="job-link" href="{{.EasyApplyBatchURL}}">Easy Apply items from this batch →</a></div>{{end}}</div><div class="review-nav"><a class="btn ghost" id="review-prev" href="{{.ReviewPrevURL}}">← Previous</a><a class="btn ghost" id="review-next" href="{{.ReviewNextURL}}">Skip / Next →</a></div></div>
           <div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Application{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span class="badge state-draft_created">DRAFT_CREATED</span></div>
           <div class="form-grid"><div><div class="field-label">To</div><div class="field">{{.SelectedApplication.Recipient}}</div></div><div><div class="field-label">CV Profile</div><div class="field">{{.SelectedApplication.CVProfile}}</div></div></div>
           <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
@@ -1106,6 +1106,59 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         </div></section>
       {{else}}
         <section class="content-card"><div class="empty">No DRAFT_CREATED applications remain in this review queue. <a class="job-link" href="/app/applications">Back to Applications</a></div></section>
+      {{end}}
+    {{else if .EasyApplyMode}}
+      {{if .SelectedApplication}}
+        <section class="content-card"><div class="content-pad">
+          <div class="review-progress">
+            <div><span class="review-counter">Easy Apply {{.EasyApplyPosition}} of {{.EasyApplyTotal}}</span><div class="muted">LinkedIn submission stays manual. Open the form, submit it yourself, then confirm completion here.</div></div>
+            <div class="review-nav"><a class="btn ghost" id="easy-prev" href="{{.EasyApplyPrevURL}}">← Previous</a><a class="btn ghost" id="easy-next" href="{{.EasyApplyNextURL}}">Skip / Next →</a></div>
+          </div>
+          <div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Easy Apply{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
+
+          <div class="easy-apply-hero">
+            <div class="info-card">
+              <h3>LinkedIn Easy Apply</h3>
+              <div class="info-row"><span>Application method</span><b>EASY APPLY</b></div>
+              <div class="info-row"><span>LinkedIn URL</span><b>{{if .EasyApplyCurrentURL}}Ready{{else}}Missing / invalid{{end}}</b></div>
+              <div class="info-row"><span>Opened at</span><b>{{if .SelectedApplication.OpenedAt}}{{.SelectedApplication.OpenedAt}}{{else}}Not opened yet{{end}}</b></div>
+              <div class="easy-checklist">
+                <div class="easy-check"><strong>✓</strong> Job detail collected</div>
+                <div class="easy-check"><strong>✓</strong> Submission remains human-controlled</div>
+                <div class="easy-check"><strong>{{if .EasyApplyRecommendedCVReady}}✓{{else}}○{{end}}</strong> Recommended CV {{if .EasyApplyRecommendedCVReady}}file ready{{else}}needs attention{{end}}</div>
+              </div>
+            </div>
+            <div class="info-card">
+              <h3>Recommended CV</h3>
+              <div class="info-row"><span>Profile</span><b>{{if .EasyApplyRecommendedCV}}{{.EasyApplyRecommendedCV}}{{else}}Not configured{{end}}</b></div>
+              <div class="info-row"><span>File</span><b>{{if .EasyApplyRecommendedCVPath}}{{base .EasyApplyRecommendedCVPath}}{{else}}—{{end}}</b></div>
+              <div class="info-row"><span>Status</span><b>{{if .EasyApplyRecommendedCVReady}}READY{{else}}CHECK CV PROFILES{{end}}</b></div>
+              <div class="footer-note">This is a recommendation only. Choose the CV you actually used when marking the application as applied.</div>
+            </div>
+          </div>
+
+          {{range .EasyApplyOpenTargets}}<div class="easy-open-target" data-url="{{.URL}}" data-mark="{{.MarkURL}}" data-job="{{.JobID}}"></div>{{end}}
+
+          <div class="easy-actions">
+            <form method="post" target="_blank" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/open">
+              <input type="hidden" name="csrf" value="{{.CSRF}}">
+              <button class="btn primary" type="submit" {{if not .EasyApplyCurrentURL}}disabled{{end}}>Open LinkedIn Easy Apply ↗</button>
+            </form>
+            <button class="btn ghost" id="easy-open-next3" type="button" {{if not .EasyApplyOpenTargets}}disabled{{end}}>Open Next 3</button>
+          </div>
+          <div class="footer-note">Open Next 3 is an explicit convenience action. Your browser may block extra tabs; no form is filled or submitted automatically.</div>
+
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/applied" style="margin-top:18px">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <input type="hidden" name="return_to" value="{{.EasyApplyStayURL}}">
+            <div class="form-group"><label>CV used / tracked</label><select name="cv_profile"><option value="">No CV profile recorded</option>{{range .CVProfiles}}<option value="{{.ID}}" {{if eq $.EasyApplyRecommendedCV .ID}}selected{{end}}>{{.ID}}{{if .Default}} · default{{end}}</option>{{end}}</select></div>
+            <label class="checkline"><input type="checkbox" name="apply_confirm" value="1" required> I confirm I manually submitted this application on LinkedIn.</label>
+            <div class="detail-actions"><a class="btn ghost" href="{{.EasyApplyNextURL}}">Skip</a><button class="btn primary" type="submit">Mark Applied &amp; Next</button></div>
+          </form>
+          <div class="footer-note">Mark Applied &amp; Next records APPLIED locally. It does not interact with the LinkedIn form.</div>
+        </div></section>
+      {{else}}
+        <section class="content-card"><div class="empty">No READY_EASY_APPLY or IN_PROGRESS applications remain. <a class="job-link" href="/app/jobs?method=EASY_APPLY">Browse Easy Apply Jobs</a></div></section>
       {{end}}
     {{else if .SelectedApplication}}
       <div class="content-card"><div class="content-pad"><div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Application{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
@@ -1215,10 +1268,13 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
     {{else}}
       <div class="pipeline-strip">
         <div class="pipeline-mini"><b>{{.Stats.ReadyTotal}}</b><span>Ready Email</span></div>
+        <div class="pipeline-mini"><b>{{.Stats.EasyReadyTotal}}</b><span>Ready Easy Apply</span></div>
+        <div class="pipeline-mini"><b>{{.Stats.InProgressTotal}}</b><span>Easy In Progress</span></div>
         <div class="pipeline-mini"><b>{{.Stats.NeedReviewTotal}}</b><span>Need Review</span></div>
         <div class="pipeline-mini"><b>{{.Stats.DraftTotal}}</b><span>Draft Created</span></div>
         <div class="pipeline-mini"><b>{{.Stats.ApprovedTotal}}</b><span>Approved</span></div>
-        <div class="pipeline-mini"><b>{{.Stats.SentTotal}}</b><span>Sent</span></div>
+        <div class="pipeline-mini"><b>{{.Stats.AppliedTotal}}</b><span>Applied</span></div>
+        <div class="pipeline-mini"><b>{{.Stats.SentTotal}}</b><span>Email Sent</span></div>
       </div>
       <form class="toolbar" method="get" action="/app/applications">
         <input class="control search" name="q" value="{{.Query}}" placeholder="Search applications…">
@@ -1235,8 +1291,9 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
               <button class="btn ghost" type="submit" formaction="/app/applications/bulk/prepare">Prepare Selected</button>
               <button class="btn ghost" type="submit" formaction="/app/applications/bulk/draft">Create Drafts</button>
               <button class="btn ghost" type="submit" formaction="/app/applications/bulk/review">Review Selected</button>
-              <button class="btn ghost" type="submit" formaction="/app/applications/bulk/remove" onclick="return confirm('Remove eligible selected applications from the queue? READY_EMAIL/NEED_REVIEW only; collected Jobs stay in the database.')">Remove Selected</button>
-              <a class="btn ghost" href="/app/applications/review">Review Draft Queue ({{.Stats.DraftTotal}})</a>
+              <button class="btn ghost" type="submit" formaction="/app/applications/bulk/remove" onclick="return confirm('Remove eligible selected applications from the queue? Pre-draft / pre-submission states only; collected Jobs stay in the database.')">Remove Selected</button>
+              <a class="btn ghost" href="/app/applications/review">Review Drafts ({{.Stats.DraftTotal}})</a>
+              <a class="btn ghost" href="/app/applications/easy-apply">Easy Apply Queue ({{.Stats.EasyReadyTotal}} + {{.Stats.InProgressTotal}})</a>
               <button class="btn primary" type="submit" formaction="/app/applications/send-confirm">Confirm Send</button>
             </div>
           </div>
