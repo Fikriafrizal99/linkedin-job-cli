@@ -131,6 +131,57 @@ func (ws *webServer) handleCVProfileUpload(w http.ResponseWriter, r *http.Reques
 	redirectCVProfiles(w, r, "CV profile "+profileID+" saved.", nil)
 }
 
+func (ws *webServer) handleCVProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	if !ws.checkCSRF(w, r) {
+		return
+	}
+	id, err := normalizeDocumentID(r.PathValue("id"))
+	if err != nil {
+		redirectCVProfiles(w, r, "", err)
+		return
+	}
+	priority := 1
+	if raw := strings.TrimSpace(r.PostFormValue("priority")); raw != "" {
+		n, convErr := strconv.Atoi(raw)
+		if convErr != nil || n < 0 || n > 100 {
+			redirectCVProfiles(w, r, "", fmt.Errorf("priority must be between 0 and 100"))
+			return
+		}
+		priority = n
+	}
+	keywords := splitKeywords(r.PostFormValue("keywords"))
+
+	ws.documentMu.Lock()
+	defer ws.documentMu.Unlock()
+	settings, err := config.LoadSettings()
+	if err != nil {
+		redirectCVProfiles(w, r, "", err)
+		return
+	}
+	found := false
+	for i := range settings.Application.CVProfiles {
+		if !strings.EqualFold(strings.TrimSpace(settings.Application.CVProfiles[i].ID), id) {
+			continue
+		}
+		settings.Application.CVProfiles[i].Keywords = keywords
+		settings.Application.CVProfiles[i].Priority = priority
+		found = true
+		break
+	}
+	if !found {
+		redirectCVProfiles(w, r, "", fmt.Errorf("CV profile %s not found", id))
+		return
+	}
+	if r.PostFormValue("set_default") == "1" {
+		settings.Application.DefaultCVProfile = id
+	}
+	if err := config.SaveApplicationSettings(settings.Application); err != nil {
+		redirectCVProfiles(w, r, "", err)
+		return
+	}
+	redirectCVProfiles(w, r, "CV profile "+id+" updated.", nil)
+}
+
 func (ws *webServer) handleCVProfileDefault(w http.ResponseWriter, r *http.Request) {
 	if !ws.checkCSRF(w, r) {
 		return
