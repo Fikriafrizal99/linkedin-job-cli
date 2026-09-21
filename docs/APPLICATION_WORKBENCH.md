@@ -114,6 +114,44 @@ DRAFT_CREATED → APPROVED
 
 Approval does not send email.
 
+## Recover a deleted Gmail draft
+
+If a Gmail draft is deleted directly in Gmail, the local application may still be `DRAFT_CREATED` or `APPROVED` with the old draft ID.
+
+Open that Application Detail and expand **Draft missing or deleted? Recreate it**.
+
+The recovery action:
+
+```text
+POST /app/applications/<job_id>/recreate-draft
+```
+
+reuses the saved prepared content and creates a replacement draft. Supporting attachments can be selected again.
+
+Lifecycle:
+
+```text
+DRAFT_CREATED + deleted provider draft
+        ↓ Recreate Gmail Draft
+new Gmail draft
+        ↓
+DRAFT_CREATED
+```
+
+For an approved application:
+
+```text
+APPROVED + deleted provider draft
+        ↓ Recreate Gmail Draft
+new Gmail draft
+        ↓
+DRAFT_CREATED
+        ↓
+manual review required again
+```
+
+The old approval is deliberately cleared because it applied to the old draft, not the replacement. `SENT` records cannot use this recovery action.
+
 ## Explicit Send
 
 The application can send an existing Gmail draft only after the record is already `APPROVED`.
