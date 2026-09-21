@@ -82,6 +82,7 @@ var applicationsQueueCmd = &cobra.Command{
 		queued := 0
 		ready := 0
 		review := 0
+		var queuedApps []models.JobApplication
 		for _, j := range jobs {
 			a, err := st.QueueApplication(j.ID)
 			if err != nil {
@@ -89,6 +90,7 @@ var applicationsQueueCmd = &cobra.Command{
 				continue
 			}
 			queued++
+			queuedApps = append(queuedApps, *a)
 			switch a.State {
 			case models.ApplicationStateReadyEmail:
 				ready++
@@ -104,11 +106,7 @@ var applicationsQueueCmd = &cobra.Command{
 			}
 		}
 		if jsonOut {
-			apps, err := st.ListApplications("", applicationsLimit)
-			if err != nil {
-				return err
-			}
-			return render.AsJSON(os.Stdout, apps)
+			return render.AsJSON(os.Stdout, queuedApps)
 		}
 		fmt.Fprintf(os.Stdout, "Queued %d application(s): %d ready email, %d need review.\n", queued, ready, review)
 		return nil
