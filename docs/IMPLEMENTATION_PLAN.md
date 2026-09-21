@@ -60,7 +60,7 @@ Future project/module:
 - [x] deterministic CV selection from configured profiles;
 - [x] deterministic subject/body generation and persistence;
 - [x] Gmail draft creation through an external Gmail draft provider bridge;
-- [ ] manual review;
+- [x] explicit manual review/approval gate;
 - [ ] explicit send;
 - [ ] application tracking/follow-up.
 
@@ -132,6 +132,34 @@ Safety rules:
 - `DRAFT_CREATED` is idempotent for the same provider draft id;
 - a conflicting second draft id is rejected;
 - this flow never sends email.
+
+### P3.4 — Manual Review Gate
+
+A created Gmail draft is not eligible for sending until it is explicitly approved:
+
+```bash
+linkedin-jobs applications approve <job_id>
+linkedin-jobs applications approve <job_id> --note "Reviewed in Gmail"
+linkedin-jobs applications unapprove <job_id> --note "Needs wording changes"
+```
+
+Lifecycle:
+
+```text
+DRAFT_CREATED
+    |
+    | explicit human approval
+    v
+APPROVED
+    |
+    | unapprove
+    v
+DRAFT_CREATED
+```
+
+Approval records `reviewed_at` and optional `review_note`. Re-queueing preserves `DRAFT_CREATED`, `APPROVED`, and `SENT`. Once a Gmail draft exists, `applications prepare` cannot silently replace the local subject/body/CV; draft revisions must be handled explicitly so the database cannot drift from the provider draft.
+
+No command in this stage sends email.
 
 ## Explicitly Deferred
 
