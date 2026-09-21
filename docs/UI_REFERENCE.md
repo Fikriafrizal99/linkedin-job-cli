@@ -30,9 +30,10 @@ The UI implementation should contain these screens in this order:
    - Full collected-jobs database table.
    - Filters for location, method, application state, and collector metadata.
    - Multi-select with **Select all visible**.
-   - Batch actions: **Queue Selected** and **Process Selected to Draft**.
-   - The Apply cell combines application method with explicit recipient visibility so missing-email records are recognizable before processing.
-   - Process Selected to Draft stops at `DRAFT_CREATED` and redirects eligible records to Review Queue; it never approves or sends.
+   - Batch actions: **Queue Selected** and **Process Selected**.
+   - The Apply cell distinguishes EMAIL, EASY_APPLY, and unsupported destinations.
+   - Process Selected routes EMAIL jobs to Gmail draft review and EASY_APPLY jobs to the manual Easy Apply Queue; unsupported jobs are skipped by default.
+   - No batch action approves, sends email, fills LinkedIn forms, or submits LinkedIn applications.
    - Row title navigation still opens Job Detail for one-record inspection.
 
 3. **Job Detail**
@@ -43,11 +44,12 @@ The UI implementation should contain these screens in this order:
 
 4. **Applications**
    - Application workbench / queue table.
-   - Lifecycle filters for `READY_EMAIL`, `DRAFT_CREATED`, `APPROVED`, and `SENT`.
+   - Lifecycle filters cover both channels: `READY_EMAIL`, `DRAFT_CREATED`, `APPROVED`, `SENT`, `READY_EASY_APPLY`, `IN_PROGRESS`, and `APPLIED`.
    - Search/filter by company, method, state, and date.
    - Multi-select batch actions for Prepare, Create Drafts, Review, and Confirm Send.
    - Supporting-file selection for batch draft creation.
-   - Review Draft Queue shortcut for sequential human review.
+   - Review Draft Queue shortcut for sequential email review.
+   - Easy Apply Queue shortcut for sequential manual LinkedIn application work.
    - Selecting a record still opens Application Detail.
 
 5. **Application Detail**
@@ -160,14 +162,16 @@ The visual design must be backed by the existing repository workflow rather than
 - **CV Profile** → configured deterministic CV profile.
 - **Open in Gmail** → persisted Gmail draft when available.
 - **Collect Jobs** → existing collector workflow.
-- **Applications** → `READY_EMAIL`, `DRAFT_CREATED`, `APPROVED`, and `SENT`.
+- **Applications / email** → `READY_EMAIL`, `DRAFT_CREATED`, `APPROVED`, and `SENT`.
+- **Applications / Easy Apply** → `READY_EASY_APPLY`, `IN_PROGRESS`, and `APPLIED`.
 
 ## Safety / product constraints
 
 - `Send` remains a separate explicit/manual phase after review approval.
 - Explicit send is wired only behind a dedicated final confirmation screen and checkbox.
 - Never auto-send email.
-- Never auto-apply on LinkedIn.
+- Never auto-fill or auto-submit LinkedIn applications.
+- Easy Apply may open one tab or an explicitly requested next-three batch, but submission remains manual and APPLIED requires explicit confirmation.
 - Never auto-DM or auto-connect.
 - Follow-up tracking is intentionally out of scope.
 - Do not expose actions in the UI that bypass lifecycle guards already implemented in the backend.
@@ -244,6 +248,24 @@ It delegates to the existing `Store.QueueApplication` lifecycle logic:
 After queueing, the UI redirects to Application Detail for the queued job. Job Detail changes from `Queue Application` to `View Application` once a lifecycle record exists.
 
 `NEED_REVIEW` is now surfaced in application filters, pipeline counts, and status badges. The queue action has been live-validated in the user's local browser with both READY_EMAIL and NEED_REVIEW records visible in the application pipeline.
+
+### Easy Apply manual workflow — implemented
+
+LinkedIn / Easy Apply records use a channel-specific lifecycle:
+
+```text
+READY_EASY_APPLY → IN_PROGRESS → APPLIED
+```
+
+The queue is available at:
+
+```text
+/app/applications/easy-apply
+```
+
+It provides one-at-a-time navigation, deterministic CV recommendation, **Open LinkedIn Easy Apply ↗**, explicit **Open Next 3**, and **Mark Applied & Next**. Open actions only launch LinkedIn job URLs and record local progress; they do not fill or submit forms. Marking APPLIED requires a human-confirmation checkbox after manual submission.
+
+This workflow has regression coverage and is pending live browser validation.
 
 ### Prepare Application — live validated
 
