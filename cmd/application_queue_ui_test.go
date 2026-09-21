@@ -77,14 +77,14 @@ func TestRemoveFromQueueUIOnlyForPreDraftStates(t *testing.T) {
 		return out.String()
 	}
 
-	for _, state := range []string{models.ApplicationStateReadyEmail, models.ApplicationStateNeedReview} {
+	for _, state := range []string{models.ApplicationStateReadyEmail, models.ApplicationStateNeedReview, models.ApplicationStateReadyEasyApply, models.ApplicationStateInProgress} {
 		html := render(state)
 		if !strings.Contains(html, "action=\"/app/applications/remove-ui/remove\"") ||
 			!strings.Contains(html, "Remove from Queue") {
 			t.Fatalf("%s missing remove action", state)
 		}
 	}
-	for _, state := range []string{models.ApplicationStateDraftCreated, models.ApplicationStateApproved, models.ApplicationStateSent} {
+	for _, state := range []string{models.ApplicationStateDraftCreated, models.ApplicationStateApproved, models.ApplicationStateApplied, models.ApplicationStateSent} {
 		html := render(state)
 		if strings.Contains(html, "/app/applications/remove-ui/remove") {
 			t.Fatalf("%s must not expose remove-from-queue", state)
