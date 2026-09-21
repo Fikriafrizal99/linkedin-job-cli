@@ -129,28 +129,32 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 		"name=\"job_id\" value=\"101\"",
 		"formaction=\"/app/jobs/bulk/queue\"",
 		"formaction=\"/app/jobs/bulk/process-to-draft\"",
-		"Process Selected to Draft",
+		"Process Selected",
 		"name=\"filter_q\" value=\"sales\"",
 		"name=\"filter_location\" value=\"Jakarta\"",
 		"name=\"attachment\" value=\"portfolio-1\" checked",
 		"No explicit email · skipped by default",
-		"Include jobs without email as NEED_REVIEW",
+		"Include unsupported jobs as NEED_REVIEW",
 	} {
 		if !strings.Contains(html, want) { t.Errorf("Jobs bulk UI missing %q", want) }
 	}
 }
 
-func TestJobsProcessButtonDisabledWithoutGmail(t *testing.T) {
+func TestJobsProcessButtonRemainsAvailableWithoutGmail(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil { t.Fatal(err) }
 	var b strings.Builder
 	if err := tpl.Execute(&b, appPageData{
 		Title: "Jobs", Active: "jobs", CandidateName: "Candidate", CandidateInitials: "C",
-		Jobs: []appJobRow{{ID: "101", Title: "Sales", Method: "EMAIL", State: "NOT_APPLIED"}},
+		Jobs: []appJobRow{{ID: "101", Title: "Sales", Method: "EASY_APPLY", State: "NOT_APPLIED"}},
 	}); err != nil { t.Fatal(err) }
 	html := b.String()
-	if !strings.Contains(html, `formaction="/app/jobs/bulk/process-to-draft" disabled title="Connect Gmail first"`) {
-		t.Fatal("Process Selected to Draft should be disabled when Gmail is disconnected")
+	if !strings.Contains(html, `formaction="/app/jobs/bulk/process-to-draft"`) ||
+		!strings.Contains(html, "Process Selected") {
+		t.Fatal("Process Selected should stay available for Easy Apply even when Gmail is disconnected")
+	}
+	if strings.Contains(html, `title="Connect Gmail first"`) {
+		t.Fatal("Gmail disconnect must not block Easy Apply processing")
 	}
 }
 
@@ -197,5 +201,74 @@ func TestBulkQueueJobsSkipsNonEmailUnlessExplicitlyIncluded(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if app == nil || app.State != models.ApplicationStateNeedReview {
 		t.Fatalf("expected explicit NEED_REVIEW queue, got %+v", app)
+	}
+}
+
+
+func TestProcessJobsToDraftRoutesEasyApplyWithoutCreatingEmailDraft(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "jobs-easy-apply.db"))
+	if err != nil { t.Fatal(err) }
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "easy-1", Title: "Account Executive", Company: "Example",
+		URL: "https://www.linkedin.com/jobs/view/555555/",
+		ApplicationMethod: "LINKEDIN",
+	}
+	if err := st.Upsert(job); err != nil { t.Fatal(err) }
+
+	draftCalls := 0
+	creator := func(_ context.Context, payload application.DraftPayload) (gmailclient.DraftResult, error) {
+		draftCalls++
+		return gmailclient.DraftResult{DraftID: "unexpected"}, nil
+	}
+	got := processJobsToDraft(context.Background(), st, config.ApplicationSettings{}, nil, []string{job.ID}, creator)
+	if got.Queued != 1 || got.EasyApplyQueued != 1 || got.DraftCreated != 0 || got.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", got)
+	}
+	if draftCalls != 0 {
+		t.Fatalf("Easy Apply must not create Gmail drafts, calls=%d", draftCalls)
+	}
+	if len(got.EasyApplyIDs) != 1 || got.EasyApplyIDs[0] != job.ID {
+		t.Fatalf("easy apply ids=%v", got.EasyApplyIDs)
+	}
+	app, err := st.GetApplicationByJobID(job.ID)
+	if err != nil { t.Fatal(err) }
+	if app == nil || app.State != models.ApplicationStateReadyEasyApply {
+		t.Fatalf("application=%+v", app)
+	}
+	if app.ApplyURL != job.URL {
+		t.Fatalf("apply url=%q want %q", app.ApplyURL, job.URL)
+	}
+}
+
+func TestBulkQueueJobsIncludesEasyApplyByDefault(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "jobs-queue-easy.db"))
+	if err != nil { t.Fatal(err) }
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "easy-queue", Title: "Sales", Company: "Example",
+		URL: "https://www.linkedin.com/jobs/view/666666/",
+		ApplicationMethod: "LINKEDIN",
+	}
+	if err := st.Upsert(job); err != nil { t.Fatal(err) }
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	form := url.Values{"csrf": {"csrf-test"}, "job_id": {job.ID}}
+	req := httptest.NewRequest(http.MethodPost, "/app/jobs/bulk/queue", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ws.handleAppBulkQueueJobs(rec, req)
+
+	if rec.Code != http.StatusSeeOther { t.Fatalf("status=%d", rec.Code) }
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "easy_apply_queued_count=1") || !strings.Contains(loc, "queued_count=1") {
+		t.Fatalf("redirect=%q", loc)
+	}
+	app, err := st.GetApplicationByJobID(job.ID)
+	if err != nil { t.Fatal(err) }
+	if app == nil || app.State != models.ApplicationStateReadyEasyApply {
+		t.Fatalf("application=%+v", app)
 	}
 }
