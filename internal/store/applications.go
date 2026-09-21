@@ -122,6 +122,40 @@ ON CONFLICT(job_id) DO UPDATE SET
 	return s.GetApplicationByJobID(jobID)
 }
 
+// RemoveApplication removes a pre-provider application record while keeping
+// the collected job in the jobs database. Only READY_EMAIL and NEED_REVIEW
+// records without a Gmail draft may be removed.
+func (s *Store) RemoveApplication(jobID string) error {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return fmt.Errorf("empty job id")
+	}
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	switch existing.State {
+	case models.ApplicationStateReadyEmail, models.ApplicationStateNeedReview:
+		// Safe pre-provider states.
+	default:
+		return fmt.Errorf("application state is %s; only READY_EMAIL or NEED_REVIEW can be removed from queue", existing.State)
+	}
+	if strings.TrimSpace(existing.GmailDraftID) != "" {
+		return fmt.Errorf("application already references Gmail draft %s", existing.GmailDraftID)
+	}
+	res, err := s.db.Exec(`DELETE FROM applications WHERE job_id=?`, jobID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return fmt.Errorf("application for job %s was not removed", jobID)
+	}
+	return nil
+}
+
 // SaveApplicationPreparation stores deterministic draft content while keeping
 // lifecycle state unchanged. Only queued applications may be prepared.
 func (s *Store) SaveApplicationPreparation(jobID, subject, body, cvProfile string) (*models.JobApplication, error) {
