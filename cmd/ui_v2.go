@@ -412,6 +412,12 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.ActionMessage += " Draft ID: " + draftID + "."
 		}
 	}
+	if r.URL.Query().Get("draft_recreated") == "1" {
+		pd.ActionMessage = "Replacement Gmail draft created successfully. The application is back in DRAFT_CREATED and must be reviewed again."
+		if draftID := strings.TrimSpace(r.URL.Query().Get("draft_id")); draftID != "" {
+			pd.ActionMessage += " New Draft ID: " + draftID + "."
+		}
+	}
 	switch r.URL.Query().Get("review") {
 	case "approved":
 		pd.ActionMessage = "Application approved after manual Gmail draft review. No email was sent."
@@ -916,6 +922,17 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
           <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
           <div class="detail-grid" style="margin-top:14px"><div class="info-card"><h3>Gmail Draft</h3><div class="info-row"><span>Draft ID</span><b>{{.SelectedApplication.GmailDraftID}}</b></div><div class="info-row"><span>Created</span><b>{{.SelectedApplication.DraftCreatedAt}}</b></div></div><div class="info-card"><h3>Review Gate</h3><div class="info-row"><span>Current state</span><b>DRAFT_CREATED</b></div><div class="info-row"><span>Email sent</span><b>No</b></div></div></div>
           <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a></div>
+          {{if and .GmailConnected .SelectedCVReady}}
+          <details style="margin-top:12px"><summary class="job-link" style="cursor:pointer">Draft missing or deleted? Recreate it</summary>
+            <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/recreate-draft" style="margin-top:12px" onsubmit="return confirm('Create a replacement Gmail draft? The old local draft reference will be replaced.')">
+              <input type="hidden" name="csrf" value="{{.CSRF}}">
+              {{if .Attachments}}<div class="attachment-picker">{{range .Attachments}}{{if .Exists}}<label class="checkline attachment-option"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}><span><b>{{.Label}}</b><small>{{.Kind}} · {{.FileName}}</small></span></label>{{end}}{{end}}</div>{{end}}
+              <label class="checkline"><input type="checkbox" name="recreate_confirm" value="1" required> I confirm the Gmail draft is missing/unusable and want a replacement draft.</label>
+              <div class="detail-actions"><button class="btn ghost" type="submit">Recreate Gmail Draft</button></div>
+            </form>
+            <div class="footer-note">The saved recipient, subject, body and CV profile are reused. The replacement remains DRAFT_CREATED and still requires review.</div>
+          </details>
+          {{end}}
           <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/approve" style="margin-top:14px">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <input type="hidden" name="return_to" value="{{.ReviewStayURL}}">
@@ -987,6 +1004,17 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
             <div class="info-card"><h3>Send Gate</h3><div class="info-row"><span>Status</span><b>APPROVED</b></div><div class="info-row"><span>Email sent</span><b>No</b></div></div>
           </div>
           <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a></div>
+          {{if and .GmailConnected .SelectedCVReady}}
+          <details style="margin-top:12px"><summary class="job-link" style="cursor:pointer">Approved draft missing or deleted? Recreate it</summary>
+            <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/recreate-draft" style="margin-top:12px" onsubmit="return confirm('Create a replacement Gmail draft? Approval will be reset and the new draft must be reviewed again.')">
+              <input type="hidden" name="csrf" value="{{.CSRF}}">
+              {{if .Attachments}}<div class="attachment-picker">{{range .Attachments}}{{if .Exists}}<label class="checkline attachment-option"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}><span><b>{{.Label}}</b><small>{{.Kind}} · {{.FileName}}</small></span></label>{{end}}{{end}}</div>{{end}}
+              <label class="checkline"><input type="checkbox" name="recreate_confirm" value="1" required> I confirm the approved Gmail draft is missing/unusable and want a replacement.</label>
+              <div class="detail-actions"><button class="btn ghost" type="submit">Recreate Gmail Draft &amp; Reset Approval</button></div>
+            </form>
+            <div class="footer-note">A successful replacement changes APPROVED → DRAFT_CREATED and clears the old review approval. The replacement must be reviewed again before it can be sent.</div>
+          </details>
+          {{end}}
           <form method="post" action="/app/applications/send-confirm" style="margin-top:10px"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="job_id" value="{{.SelectedApplication.JobID}}"><button class="btn primary" type="submit" style="width:100%">Review &amp; Send Application</button></form>
           <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/unapprove" style="margin-top:14px" onsubmit="return confirm('Return this application to DRAFT_CREATED for more review?')">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
