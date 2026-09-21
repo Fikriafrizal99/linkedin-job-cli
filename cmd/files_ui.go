@@ -238,7 +238,7 @@ func (ws *webServer) handleAttachmentUpload(w http.ResponseWriter, r *http.Reque
 	if baseID == "" {
 		baseID = "attachment"
 	}
-	id := fmt.Sprintf("%s-%d", baseID, time.Now().Unix())
+	id := fmt.Sprintf("%s-%d", baseID, time.Now().UnixNano())
 	destDir := filepath.Join(managedFilesRoot(), "attachments")
 	if err := os.MkdirAll(destDir, 0o700); err != nil {
 		redirectCVProfiles(w, r, "", err)
