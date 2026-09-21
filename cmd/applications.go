@@ -21,6 +21,7 @@ var (
 	applicationsState         string
 	applicationsPrepareAll    bool
 	applicationsCVProfile     string
+	applicationsDraftID       string
 )
 
 var applicationsCmd = &cobra.Command{
@@ -260,6 +261,77 @@ var applicationsProfilesCmd = &cobra.Command{
 	},
 }
 
+var applicationsDraftPayloadCmd = &cobra.Command{
+	Use:   "draft-payload <job_id>",
+	Short: "Validate and emit the Gmail draft payload for a prepared application",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		settings, err := config.LoadSettings()
+		if err != nil {
+			return fmt.Errorf("load settings: %w", err)
+		}
+		st, err := openStore()
+		if err != nil {
+			return fmt.Errorf("open DB: %w", err)
+		}
+		defer st.Close()
+
+		a, err := st.GetApplicationByJobID(args[0])
+		if err != nil {
+			return err
+		}
+		if a == nil {
+			return fmt.Errorf("no application record for job %s", args[0])
+		}
+		payload, err := appengine.BuildDraftPayload(a, settings.Application)
+		if err != nil {
+			return err
+		}
+
+		if jsonOut {
+			return render.AsJSON(os.Stdout, payload)
+		}
+		fmt.Fprintf(os.Stdout, "Gmail draft payload ready for job %s\n", payload.JobID)
+		fmt.Fprintf(os.Stdout, "To:      %s\n", payload.To)
+		fmt.Fprintf(os.Stdout, "Subject: %s\n", payload.Subject)
+		fmt.Fprintf(os.Stdout, "CV:      %s\n", payload.CVProfile)
+		for _, path := range payload.AttachmentFiles {
+			fmt.Fprintf(os.Stdout, "Attach:  %s\n", path)
+		}
+		fmt.Fprintln(os.Stdout, "\nBody:")
+		fmt.Fprintln(os.Stdout, payload.Body)
+		fmt.Fprintln(os.Stdout, "\nNo Gmail draft was created by this command.")
+		return nil
+	},
+}
+
+var applicationsRecordDraftCmd = &cobra.Command{
+	Use:   "record-draft <job_id>",
+	Short: "Record a successfully created Gmail draft and advance lifecycle state",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if strings.TrimSpace(applicationsDraftID) == "" {
+			return fmt.Errorf("--draft-id is required")
+		}
+		st, err := openStore()
+		if err != nil {
+			return fmt.Errorf("open DB: %w", err)
+		}
+		defer st.Close()
+
+		a, err := st.MarkApplicationDraftCreated(args[0], applicationsDraftID)
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			return render.AsJSON(os.Stdout, a)
+		}
+		fmt.Fprintf(os.Stdout, "DRAFT_CREATED  %s  Gmail draft %s\n", a.JobID, a.GmailDraftID)
+		fmt.Fprintln(os.Stdout, "Draft recorded. No email was sent.")
+		return nil
+	},
+}
+
 var applicationsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List application queue records",
@@ -364,12 +436,16 @@ func init() {
 	applicationsPrepareCmd.Flags().IntVar(&applicationsLimit, "limit", 50, "maximum application records to prepare")
 	applicationsPrepareCmd.Flags().StringVar(&applicationsCVProfile, "cv-profile", "", "override deterministic CV selection with a configured profile id")
 
+	applicationsRecordDraftCmd.Flags().StringVar(&applicationsDraftID, "draft-id", "", "Gmail draft id returned by the draft provider")
+
 	applicationsListCmd.Flags().IntVar(&applicationsLimit, "limit", 50, "maximum application records to list")
 	applicationsListCmd.Flags().StringVar(&applicationsState, "state", "", "filter by lifecycle state, e.g. READY_EMAIL")
 
 	applicationsCmd.AddCommand(applicationsQueueCmd)
 	applicationsCmd.AddCommand(applicationsPrepareCmd)
 	applicationsCmd.AddCommand(applicationsProfilesCmd)
+	applicationsCmd.AddCommand(applicationsDraftPayloadCmd)
+	applicationsCmd.AddCommand(applicationsRecordDraftCmd)
 	applicationsCmd.AddCommand(applicationsListCmd)
 	applicationsCmd.AddCommand(applicationsShowCmd)
 	rootCmd.AddCommand(applicationsCmd)
