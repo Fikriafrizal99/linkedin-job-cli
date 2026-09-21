@@ -55,14 +55,29 @@ Not part of Collector V1.
 
 Future project/module:
 
-- [ ] read eligible jobs from collector;
-- [ ] application queue;
+- [x] read eligible jobs from collector;
+- [x] application queue with separate lifecycle persistence;
 - [ ] CV selection;
 - [ ] subject/body generation;
 - [ ] Gmail draft creation;
 - [ ] manual review;
 - [ ] explicit send;
 - [ ] application tracking/follow-up.
+
+### P3.1 — Queue Foundation
+
+Implemented commands:
+
+```bash
+linkedin-jobs applications queue <job_id>
+linkedin-jobs applications queue --all --limit 50
+linkedin-jobs applications queue --all --include-review --limit 50
+linkedin-jobs applications list
+linkedin-jobs applications list --state READY_EMAIL
+linkedin-jobs applications show <job_id>
+```
+
+Batch queue defaults to jobs with an explicit application email. Non-email jobs are only queued as `NEED_REVIEW` when requested with `--include-review`. Application lifecycle state is stored in a separate `applications` table so collector-owned job state remains independent. Queueing is idempotent by `job_id`.
 
 ## Explicitly Deferred
 
