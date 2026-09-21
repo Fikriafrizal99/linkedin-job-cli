@@ -80,3 +80,33 @@ func TestListApplicationsByState(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+
+func TestSaveApplicationPreparation(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-prepare")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+
+	got, err := st.SaveApplicationPreparation(
+		j.ID,
+		"Application - Staff Engineer",
+		"Dear Hiring Team...",
+		"general",
+	)
+	if err != nil {
+		t.Fatalf("SaveApplicationPreparation: %v", err)
+	}
+	if got.State != models.ApplicationStateReadyEmail {
+		t.Fatalf("state changed unexpectedly: %q", got.State)
+	}
+	if got.Subject != "Application - Staff Engineer" || got.Body == "" || got.CVProfile != "general" {
+		t.Fatalf("prepared data not persisted: %+v", got)
+	}
+}
