@@ -206,6 +206,51 @@ WHERE job_id=?
 	return s.GetApplicationByJobID(jobID)
 }
 
+// ReplaceApplicationDraft records a newly-created Gmail draft for an explicit
+// recovery action. It is allowed only from DRAFT_CREATED or APPROVED and
+// returns the application to DRAFT_CREATED so the replacement draft must be
+// reviewed again. SENT is never eligible.
+func (s *Store) ReplaceApplicationDraft(jobID, draftID string) (*models.JobApplication, error) {
+	jobID = strings.TrimSpace(jobID)
+	draftID = strings.TrimSpace(draftID)
+	if jobID == "" {
+		return nil, fmt.Errorf("empty job id")
+	}
+	if draftID == "" {
+		return nil, fmt.Errorf("empty Gmail draft id")
+	}
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State != models.ApplicationStateDraftCreated &&
+		existing.State != models.ApplicationStateApproved {
+		return nil, fmt.Errorf("application state is %s; expected DRAFT_CREATED or APPROVED", existing.State)
+	}
+	if strings.TrimSpace(existing.Recipient) == "" ||
+		strings.TrimSpace(existing.Subject) == "" ||
+		strings.TrimSpace(existing.Body) == "" ||
+		strings.TrimSpace(existing.CVProfile) == "" {
+		return nil, fmt.Errorf("application is not fully prepared")
+	}
+
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications
+SET state=?, gmail_draft_id=?, gmail_message_id='', gmail_thread_id='',
+    draft_created_at=?, reviewed_at='', review_note='',
+    sent_at='', last_error='', updated_at=?
+WHERE job_id=?
+`,
+		models.ApplicationStateDraftCreated, draftID, now, now, jobID); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(jobID)
+}
+
 // RecordApplicationDraftError stores a provider error without advancing state.
 func (s *Store) RecordApplicationDraftError(jobID, message string) (*models.JobApplication, error) {
 	existing, err := s.GetApplicationByJobID(strings.TrimSpace(jobID))
