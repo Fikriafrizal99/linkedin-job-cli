@@ -192,7 +192,7 @@ The former server-rendered jobs browser is retained at `/legacy` during migratio
 
 ## Phase 3 — Functional wiring
 
-### Collect Jobs — implemented, pending live validation
+### Collect Jobs — live validated
 
 The Collect Jobs page now submits to a real CSRF-protected backend endpoint:
 
@@ -215,7 +215,26 @@ The web action and CLI both use the same shared collector runner. The browser wo
 
 After completion, the page reports searched, new-candidate, persisted, exact-duplicate, and likely-repost counts.
 
-This stage is implemented but should not be marked live-validated until a real browser collection run succeeds on the user's local environment.
+This stage has been live-validated in the user's local browser and persists collected jobs into the existing SQLite-backed UI.
+
+### Queue Application — implemented, pending live validation
+
+Job Detail now exposes a real CSRF-protected `Queue Application` action:
+
+```text
+POST /app/jobs/<job_id>/queue
+```
+
+It delegates to the existing `Store.QueueApplication` lifecycle logic:
+
+- explicit EMAIL + extracted recipient → `READY_EMAIL`;
+- otherwise → `NEED_REVIEW`;
+- existing `DRAFT_CREATED`, `APPROVED`, and `SENT` states remain protected by the store;
+- no prepare, draft creation, approval, or send happens automatically.
+
+After queueing, the UI redirects to Application Detail for the queued job. Job Detail changes from `Queue Application` to `View Application` once a lifecycle record exists.
+
+`NEED_REVIEW` is now surfaced in application filters, pipeline counts, and status badges.
 
 ## Reference assets
 
