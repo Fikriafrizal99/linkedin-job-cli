@@ -79,10 +79,12 @@ type appPageData struct {
 	States                                         []string
 	CollectKeywords                                string
 	CollectLocation                                string
+	CollectLocations                               string
 	CollectPostedWithin                            string
 	CollectTop                                     int
 	CollectMessage                                 string
 	CollectError                                   string
+	CollectSearchRuns                              int
 	CollectSearched                                int
 	CollectNew                                     int
 	CollectPersisted                               int
@@ -182,16 +184,16 @@ func (ws *webServer) handleAppCollectRun(w http.ResponseWriter, r *http.Request)
 	if !ws.checkCSRF(w, r) {
 		return
 	}
-	req, err := parseUICollectForm(r.PostForm)
+	plan, err := parseUICollectPlan(r.PostForm)
 	if err != nil {
-		redirectCollectResult(w, r, req, nil, err)
+		redirectCollectPlanResult(w, r, plan, nil, err)
 		return
 	}
 
 	ws.collectMu.Lock()
-	result, runErr := runCollect(req, ws.st, nil)
+	result, runErr := runCollectBatch(plan, ws.st, nil)
 	ws.collectMu.Unlock()
-	redirectCollectResult(w, r, req, result, runErr)
+	redirectCollectPlanResult(w, r, plan, result, runErr)
 }
 
 func parseUICollectForm(v url.Values) (collectRequest, error) {
@@ -233,6 +235,83 @@ func parseUICollectForm(v url.Values) (collectRequest, error) {
 	req.WithSession = false
 	req.ForceOverwrite = false
 	return req, nil
+}
+
+func parseUICollectPlan(v url.Values) (collectPlan, error) {
+	base := collectRequest{PostedWithin: strings.TrimSpace(v.Get("posted_within"))}
+	if base.PostedWithin == "" {
+		base.PostedWithin = "7d"
+	}
+	if _, err := resolvePostedWithin(base.PostedWithin); err != nil {
+		return collectPlan{}, err
+	}
+
+	top := 50
+	if raw := strings.TrimSpace(v.Get("top")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return collectPlan{}, fmt.Errorf("maximum results must be a number")
+		}
+		top = n
+	}
+	if top < 1 || top > 100 {
+		return collectPlan{}, fmt.Errorf("maximum results must be between 1 and 100 per search")
+	}
+	base.Top = top
+	base.WithSession = false
+	base.ForceOverwrite = false
+
+	locationText := v.Get("locations")
+	if strings.TrimSpace(locationText) == "" {
+		locationText = v.Get("location")
+	}
+	return buildCollectPlan(base, []string{v.Get("keywords")}, []string{locationText})
+}
+
+func redirectCollectPlanResult(w http.ResponseWriter, r *http.Request, plan collectPlan, result *collectRunResult, runErr error) {
+	q := url.Values{}
+	if len(plan.Queries) > 0 {
+		q.Set("keywords", strings.Join(plan.Queries, "\n"))
+	} else {
+		q.Set("keywords", strings.TrimSpace(r.PostFormValue("keywords")))
+	}
+	if len(plan.Locations) > 0 {
+		q.Set("locations", collectLocationsText(plan.Locations))
+	} else {
+		locationText := r.PostFormValue("locations")
+		if strings.TrimSpace(locationText) == "" {
+			locationText = r.PostFormValue("location")
+		}
+		q.Set("locations", strings.TrimSpace(locationText))
+	}
+	if len(plan.Requests) > 0 {
+		req := plan.Requests[0]
+		q.Set("posted_within", nonEmpty(req.PostedWithin, "7d"))
+		if req.Top > 0 {
+			q.Set("top", strconv.Itoa(req.Top))
+		}
+	} else {
+		q.Set("posted_within", nonEmpty(strings.TrimSpace(r.PostFormValue("posted_within")), "7d"))
+		if raw := strings.TrimSpace(r.PostFormValue("top")); raw != "" {
+			q.Set("top", raw)
+		}
+	}
+	if runErr != nil {
+		msg := runErr.Error()
+		if len(msg) > 240 {
+			msg = msg[:240]
+		}
+		q.Set("collect_error", msg)
+	} else if result != nil {
+		q.Set("collect", "done")
+		q.Set("search_runs", strconv.Itoa(result.SearchRuns))
+		q.Set("searched", strconv.Itoa(result.Searched))
+		q.Set("new", strconv.Itoa(result.NewCandidates))
+		q.Set("persisted", strconv.Itoa(result.Persisted))
+		q.Set("exact", strconv.Itoa(result.ExactDuplicates))
+		q.Set("reposts", strconv.Itoa(result.LikelyReposts))
+	}
+	http.Redirect(w, r, "/app/collect?"+q.Encode(), http.StatusSeeOther)
 }
 
 func redirectCollectResult(w http.ResponseWriter, r *http.Request, req collectRequest, result *collectRunResult, runErr error) {
@@ -363,7 +442,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd := appPageData{
 		CSRF: ws.csrf, Active: "dashboard", Title: "Dashboard",
 		Subtitle:        "Overview of your job search and application progress.",
-		CollectKeywords: "Sales Executive", CollectLocation: "Indonesia",
+		CollectKeywords: "Sales Executive", CollectLocation: "Indonesia", CollectLocations: "Indonesia",
 		CollectPostedWithin: "7d", CollectTop: 50,
 	}
 	gmailState := currentGmailUIState()
@@ -436,8 +515,12 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	if r.URL.Query().Has("keywords") {
 		pd.CollectKeywords = strings.TrimSpace(r.URL.Query().Get("keywords"))
 	}
-	if r.URL.Query().Has("location") {
+	if r.URL.Query().Has("locations") {
+		pd.CollectLocations = strings.TrimSpace(r.URL.Query().Get("locations"))
+		pd.CollectLocation = pd.CollectLocations
+	} else if r.URL.Query().Has("location") {
 		pd.CollectLocation = strings.TrimSpace(r.URL.Query().Get("location"))
+		pd.CollectLocations = pd.CollectLocation
 	}
 	if r.URL.Query().Has("posted_within") {
 		if v := strings.TrimSpace(r.URL.Query().Get("posted_within")); v != "" {
@@ -547,12 +630,13 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		pd.ActionMessage = "Gmail disconnected."
 	}
 	if r.URL.Query().Get("collect") == "done" {
+		pd.CollectSearchRuns, _ = strconv.Atoi(r.URL.Query().Get("search_runs"))
 		pd.CollectSearched, _ = strconv.Atoi(r.URL.Query().Get("searched"))
 		pd.CollectNew, _ = strconv.Atoi(r.URL.Query().Get("new"))
 		pd.CollectPersisted, _ = strconv.Atoi(r.URL.Query().Get("persisted"))
 		pd.CollectExactDuplicates, _ = strconv.Atoi(r.URL.Query().Get("exact"))
 		pd.CollectLikelyReposts, _ = strconv.Atoi(r.URL.Query().Get("reposts"))
-		pd.CollectMessage = fmt.Sprintf("Collection finished: %d searched, %d new, %d persisted.", pd.CollectSearched, pd.CollectNew, pd.CollectPersisted)
+		pd.CollectMessage = fmt.Sprintf("Collection finished: %d search combination(s), %d listings scanned, %d new, %d persisted.", pd.CollectSearchRuns, pd.CollectSearched, pd.CollectNew, pd.CollectPersisted)
 	}
 
 	locationSet := map[string]bool{}

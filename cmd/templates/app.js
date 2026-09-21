@@ -17,11 +17,34 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu && menu.open) { menu.open = false; menu.querySelector('summary').focus(); } });
 
   // Native GET filters keep the URL as the source of truth.
-  var k = byId('collect-keywords'), l = byId('collect-location'), p = byId('collect-posted'), t = byId('collect-top'), out = byId('collect-preview');
+  var k = byId('collect-keywords'), l = byId('collect-locations'), p = byId('collect-posted'), t = byId('collect-top'), out = byId('collect-preview'), planStatus = byId('collect-plan'), collectSubmit = byId('collect-submit');
   function quote(v) { return '"' + String(v || '').replace(/"/g, '\\"') + '"'; }
+  function lines(el) {
+    if (!el) return [];
+    var seen = new Set();
+    return el.value.split(/\r?\n/).map(function (v) { return v.trim(); }).filter(function (v) {
+      var key = v.toLowerCase();
+      if (!v || seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+  }
   function preview() {
     if (!out || !k) return;
-    out.textContent = 'linkedin-jobs collect ' + quote(k.value.trim()) + (l.value.trim() ? ' --location ' + quote(l.value.trim()) : '') + ' --posted-within ' + p.value + ' --top ' + t.value;
+    var queries = lines(k), locations = lines(l), effectiveLocations = Math.max(1, locations.length), combinations = queries.length * effectiveLocations;
+    var command = ['linkedin-jobs', 'collect'];
+    queries.forEach(function (q) { command.push('--query', quote(q)); });
+    locations.forEach(function (loc) { command.push('--location', quote(loc)); });
+    command.push('--posted-within', p.value, '--top', t.value);
+    out.textContent = command.join(' ');
+    if (planStatus) {
+      planStatus.textContent = queries.length + ' quer' + (queries.length === 1 ? 'y' : 'ies') + ' × ' + (locations.length || 1) + ' location' + (effectiveLocations === 1 ? '' : 's') + ' = ' + combinations + ' search combination' + (combinations === 1 ? '' : 's') + '.';
+      if (!locations.length) planStatus.textContent += ' Location is unrestricted.';
+      if (combinations > 50) planStatus.textContent += ' Reduce the list to 50 combinations or fewer.';
+    }
+    if (collectSubmit) {
+      collectSubmit.disabled = queries.length === 0 || queries.length > 20 || locations.length > 10 || combinations > 50;
+      collectSubmit.title = combinations > 50 ? 'Maximum 50 query/location combinations' : '';
+    }
   }
   [k, l, p, t].forEach(function (el) { if (el) el.addEventListener('input', preview); }); preview();
 

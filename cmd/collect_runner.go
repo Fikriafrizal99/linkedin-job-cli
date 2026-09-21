@@ -22,6 +22,7 @@ type collectRequest struct {
 }
 
 type collectRunResult struct {
+	SearchRuns       int      `json:"search_runs"`
 	Searched         int      `json:"searched"`
 	NewCandidates    int      `json:"new_candidates"`
 	Persisted        int      `json:"persisted"`
@@ -73,7 +74,7 @@ func runCollect(req collectRequest, st *store.Store, progress collectProgressFun
 		j.Source = "linkedin"
 	}
 
-	result := &collectRunResult{Searched: len(jobs)}
+	result := &collectRunResult{SearchRuns: 1, Searched: len(jobs)}
 	target := jobs
 	if !req.ForceOverwrite {
 		target, err = filterNewJobsWithStore(st, jobs)

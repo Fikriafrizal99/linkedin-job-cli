@@ -354,6 +354,7 @@ linkedin-jobs stats --top 25
 linkedin-jobs tag 4430749190 applied --note "referred by Sam"
 linkedin-jobs export --format csv -o jobs.csv
 linkedin-jobs search "Staff Engineer" --location Toronto --top 10  # skips jobs already in the DB; only new ones are fetched/scored
+linkedin-jobs collect --query "Sales Operations" --query "Business Development" --location Indonesia --location Jakarta --posted-within 7d --top 30
 linkedin-jobs count
 linkedin-jobs purge
 ```
@@ -366,6 +367,8 @@ linkedin-jobs serve --port 9000          # custom port
 ```
 
 The local browser now includes the **Job Command Center** under `/app/` with Dashboard, Jobs, Applications, CV Profiles, Collect Jobs, and Settings. The previous jobs browser remains available at `/legacy`.
+
+**Collect Jobs** accepts multiple job-title queries and multiple locations (one per line in the browser, repeated `--query` / `--location` flags in the CLI). It runs every query against every location, up to 50 search combinations per batch. `--top` is the maximum result count for each combination. Existing LinkedIn job IDs are still skipped before detail fetching.
 
 The **Jobs** database and **Applications** page now work as one batch pipeline.
 

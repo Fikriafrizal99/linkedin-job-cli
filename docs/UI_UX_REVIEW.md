@@ -82,3 +82,8 @@ Screenshots from this session are in `/tmp/job-ui-audit/`: `before/`, `final-rea
 - List paging currently slices the existing in-memory store results; database-level pagination is a separate performance improvement for very large collections.
 - Chromium was verified; native popup behavior and assistive-technology behavior should also be checked in other browsers/platforms before broader distribution.
 - Live Gmail creation/sending and live LinkedIn submissions were intentionally not exercised by this UI review; existing provider/lifecycle regression coverage remains intact.
+
+
+## Multi-query / multi-location collection
+
+The collector supports batch discovery without concatenating unrelated job titles into one LinkedIn query. The browser accepts one query and one location per line, previews the query × location search count, and blocks batches above 50 combinations. The CLI preserves the existing positional keyword syntax while adding repeatable `--query` and `--location` flags. `--top` is explicitly per search combination. Existing LinkedIn-ID and structural duplicate handling remains authoritative, so repeated results across queries/locations do not create duplicate stored jobs.

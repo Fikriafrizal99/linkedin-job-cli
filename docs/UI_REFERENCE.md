@@ -70,8 +70,9 @@ The UI implementation should contain these screens in this order:
 
 7. **Collect Jobs**
    - Search criteria form.
-   - Keyword/title query.
-   - Location.
+   - Multiple keyword/title queries, one per line.
+   - Multiple locations, one per line; blank means unrestricted location.
+   - Query × location combinations are previewed before collection.
    - Posted-within window.
    - Bounded collection options.
    - Start Collection primary action.
@@ -218,8 +219,10 @@ POST /app/collect/run
 The web action and CLI both use the same shared collector runner. The browser workflow is intentionally bounded:
 
 - anonymous public LinkedIn collection only;
-- keywords are required;
-- maximum 100 results per web run;
+- 1–20 queries are required; up to 10 locations are supported;
+- every query is searched against every location, capped at 50 combinations per batch;
+- blank locations mean an unrestricted LinkedIn location search;
+- maximum 100 results per query/location search;
 - posted-within is validated through the existing collector parser;
 - existing LinkedIn job IDs are skipped;
 - structural dedup remains active;
@@ -228,7 +231,7 @@ The web action and CLI both use the same shared collector runner. The browser wo
 - session fallback and force-overwrite remain CLI-only;
 - duplicate submissions are serialized by the local web server.
 
-After completion, the page reports searched, new-candidate, persisted, exact-duplicate, and likely-repost counts.
+After completion, the page reports search-combination count, listings scanned, new-candidate, persisted, exact-duplicate, and likely-repost counts. The CLI keeps the legacy positional query syntax and also supports repeated `--query` and `--location` flags.
 
 This stage has been live-validated in the user's local browser and persists collected jobs into the existing SQLite-backed UI.
 

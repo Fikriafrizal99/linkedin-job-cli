@@ -158,7 +158,7 @@ func TestSettingsAndCollectUIInteractionsRender(t *testing.T) {
 				}
 			}
 		case "collect":
-			for _, want := range []string{"collect-keywords", "collect-location", "collect-preview", "--posted-within"} {
+			for _, want := range []string{"collect-keywords", "collect-locations", "collect-plan", "collect-preview", "--posted-within"} {
 				if !strings.Contains(out, want) {
 					t.Errorf("collect UI missing %q", want)
 				}
@@ -197,6 +197,31 @@ func TestParseUICollectFormBounds(t *testing.T) {
 	}
 }
 
+func TestParseUICollectPlanSupportsMultipleQueriesAndLocations(t *testing.T) {
+	plan, err := parseUICollectPlan(url.Values{
+		"keywords":      {"Sales Operations\nBusiness Development\nSales Operations"},
+		"locations":     {"Indonesia\nJakarta"},
+		"posted_within": {"7d"},
+		"top":           {"30"},
+	})
+	if err != nil {
+		t.Fatalf("parseUICollectPlan: %v", err)
+	}
+	if len(plan.Queries) != 2 || len(plan.Locations) != 2 || len(plan.Requests) != 4 {
+		t.Fatalf("unexpected plan: %+v", plan)
+	}
+	if plan.Requests[0].Keywords != "Sales Operations" || plan.Requests[0].Location != "Indonesia" || plan.Requests[0].Top != 30 {
+		t.Fatalf("unexpected first request: %+v", plan.Requests[0])
+	}
+	if _, err := parseUICollectPlan(url.Values{
+		"keywords":  {"A\nB\nC\nD\nE\nF"},
+		"locations": {"1\n2\n3\n4\n5\n6\n7\n8\n9"},
+		"top":       {"10"},
+	}); err == nil {
+		t.Fatal("expected combination limit error")
+	}
+}
+
 func TestCollectUIRendersRealPostAction(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil {
@@ -208,8 +233,9 @@ func TestCollectUIRendersRealPostAction(t *testing.T) {
 		CSRF: "csrf-real",
 		CandidateName: "Candidate",
 		CandidateInitials: "C",
-		CollectKeywords: "Sales Executive",
+		CollectKeywords: "Sales Executive\nBusiness Development",
 		CollectLocation: "Indonesia",
+		CollectLocations: "Indonesia\nJakarta",
 		CollectPostedWithin: "7d",
 		CollectTop: 50,
 	}
@@ -222,9 +248,11 @@ func TestCollectUIRendersRealPostAction(t *testing.T) {
 		`method="post" action="/app/collect/run"`,
 		`name="csrf" value="csrf-real"`,
 		`name="keywords"`,
+		`name="locations"`,
+		"Maximum Results / Search",
 		`name="top"`,
 		`id="collect-submit"`,
-		"Collect up to 100 public job listings",
+		"maximum 50 combinations",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("collect UI missing %q", want)
