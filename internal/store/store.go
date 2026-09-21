@@ -142,6 +142,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := migrateApplications(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := backfillSalarySource(db); err != nil {
 		db.Close()
 		return nil, err
