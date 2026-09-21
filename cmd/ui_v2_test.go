@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"linkedin-jobs/internal/config"
 	"linkedin-jobs/internal/models"
 	"linkedin-jobs/internal/store"
 )
@@ -375,5 +376,144 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 	if !strings.Contains(queued.String(), "View Application") ||
 		strings.Contains(queued.String(), "Queue Application") {
 		t.Fatalf("queued job detail should show view action only")
+	}
+}
+
+
+func TestPrepareApplicationForUIReadyEmail(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "prepare-ui.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "50001",
+		Title: "Sales Executive",
+		Company: "Example Co",
+		URL: "https://www.linkedin.com/jobs/view/50001",
+		ApplicationMethod: "EMAIL",
+		ApplyEmail: "jobs@example.com",
+		Description: "Sales operations and account management",
+	}
+	if err := st.Upsert(job); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(job.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+
+	settings := config.ApplicationSettings{
+		CandidateName: "Mochamad Fikri Afrizal",
+		DefaultCVProfile: "general",
+		CVProfiles: []config.CVProfileSettings{
+			{ID: "general", Path: "/tmp/general.pdf", Priority: 1},
+			{ID: "sales", Path: "/tmp/sales.pdf", Keywords: []string{"sales"}, Priority: 2},
+		},
+	}
+	got, err := prepareApplicationForUI(st, job.ID, settings, "")
+	if err != nil {
+		t.Fatalf("prepareApplicationForUI: %v", err)
+	}
+	if got.State != models.ApplicationStateReadyEmail {
+		t.Fatalf("state=%q want READY_EMAIL", got.State)
+	}
+	if got.CVProfile != "sales" {
+		t.Fatalf("CV profile=%q want sales", got.CVProfile)
+	}
+	if !strings.Contains(got.Subject, "Sales Executive") || !strings.Contains(got.Subject, "Mochamad Fikri Afrizal") {
+		t.Fatalf("unexpected subject: %q", got.Subject)
+	}
+	if !strings.Contains(got.Body, "Example Co") {
+		t.Fatalf("unexpected body: %q", got.Body)
+	}
+}
+
+func TestPrepareApplicationForUIRejectsNeedReview(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "prepare-review.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "50002",
+		Title: "Senior Sales Marketing",
+		Company: "Example Co",
+		URL: "https://www.linkedin.com/jobs/view/50002",
+		ApplicationMethod: "LINKEDIN",
+	}
+	if err := st.Upsert(job); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(job.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+
+	_, err = prepareApplicationForUI(st, job.ID, config.ApplicationSettings{}, "")
+	if err == nil || !strings.Contains(err.Error(), "expected READY_EMAIL") {
+		t.Fatalf("expected READY_EMAIL guard, got %v", err)
+	}
+}
+
+func TestApplicationDetailRendersPrepareFormForReadyEmail(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	app := &models.JobApplication{
+		JobID: "50003",
+		State: models.ApplicationStateReadyEmail,
+		Recipient: "jobs@example.com",
+	}
+	job := &models.JobPosting{ID: app.JobID, Title: "Sales Specialist", Company: "Example Co"}
+	pd := appPageData{
+		Title: "Application Detail",
+		Active: "applications",
+		CSRF: "csrf-prepare",
+		CandidateName: "Candidate",
+		CandidateInitials: "C",
+		SelectedApplication: app,
+		SelectedApplicationJob: job,
+		CVProfiles: []appCVProfile{{ID: "general", Default: true}, {ID: "sales"}},
+	}
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, pd); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`action="/app/applications/50003/prepare"`,
+		`name="csrf" value="csrf-prepare"`,
+		`name="cv_profile"`,
+		"Auto (deterministic)",
+		"Prepare Application",
+		"does not create a Gmail draft",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("prepare UI missing %q", want)
+		}
+	}
+}
+
+func TestApplicationDetailBlocksPrepareForNeedReview(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	app := &models.JobApplication{JobID: "50004", State: models.ApplicationStateNeedReview}
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, appPageData{
+		Title: "Application Detail",
+		Active: "applications",
+		CandidateName: "Candidate",
+		CandidateInitials: "C",
+		SelectedApplication: app,
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "/prepare") || !strings.Contains(out, "Recipient/email is not confirmed") {
+		t.Fatalf("NEED_REVIEW should block prepare: %s", out)
 	}
 }
