@@ -51,10 +51,12 @@ The UI implementation should contain these screens in this order:
    - `Send (Optional)` remains explicit and manual.
 
 6. **CV Profiles**
+   - This is the single file-management page; do not add a separate Documents navigation item.
+   - Upload or replace CV files directly from the browser.
    - Cards for configured CV profiles such as General, Sales, Finance, or future profiles.
-   - Default profile indicator.
-   - File path/name, matching keywords, priority, and last-known configuration.
-   - Edit/default actions must map to real settings behavior before being enabled.
+   - Default profile indicator plus editable matching keywords and priority.
+   - Additional Attachments section for portfolio, cover letter, certificates, and other supporting files.
+   - Additional files are selected manually per application before creating the Gmail draft.
 
 7. **Collect Jobs**
    - Search criteria form.
@@ -257,6 +259,23 @@ It delegates to the existing deterministic Application Engine:
 - `NEED_REVIEW` records are blocked until recipient/contact data is resolved.
 
 Re-preparation remains available while a record is still `READY_EMAIL`. Once it reaches `DRAFT_CREATED`, `APPROVED`, or `SENT`, existing backend lifecycle guards prevent silent re-preparation. The prepare action has been live-validated in the user's local browser.
+
+### CV Profiles file management — implemented, pending live validation
+
+File management stays inside `/app/cv-profiles`; there is no separate Documents page.
+
+Implemented actions:
+
+```text
+POST /app/cv-profiles/upload
+POST /app/cv-profiles/<id>/update
+POST /app/cv-profiles/<id>/default
+POST /app/cv-profiles/<id>/delete
+POST /app/cv-profiles/attachments/upload
+POST /app/cv-profiles/attachments/<id>/delete
+```
+
+Uploaded CVs and supporting files are stored under the local `~/.linkedin-jobs/files/` directory. Application Detail exposes configured supporting files as optional checkboxes and includes only the selected files when creating the Gmail draft.
 
 ### Native Gmail OAuth — live validated / Draft creation pending live validation
 
