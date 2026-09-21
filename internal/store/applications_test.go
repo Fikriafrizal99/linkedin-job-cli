@@ -308,8 +308,9 @@ CREATE TABLE applications (
 	if err := rows.Err(); err != nil {
 		t.Fatalf("table_info rows: %v", err)
 	}
-	if !cols["reviewed_at"] || !cols["review_note"] {
-		t.Fatalf("review columns missing after migration: %+v", cols)
+	if !cols["reviewed_at"] || !cols["review_note"] ||
+		!cols["gmail_message_id"] || !cols["gmail_thread_id"] {
+		t.Fatalf("application lifecycle columns missing after migration: %+v", cols)
 	}
 
 	// Idempotency: running the migration again must be a no-op.
