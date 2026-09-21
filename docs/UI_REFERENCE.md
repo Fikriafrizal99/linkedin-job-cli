@@ -317,6 +317,31 @@ Draft polish now keeps managed storage IDs out of the outgoing MIME filename. Op
 
 See `docs/GMAIL_SETUP.md` for setup instructions.
 
+### Gmail Draft Recovery — implemented, pending live validation
+
+Application Detail now handles the case where a Gmail draft was deleted outside the app while SQLite still stores the old draft ID.
+
+Route:
+
+```text
+POST /app/applications/<job_id>/recreate-draft
+```
+
+Rules:
+
+- available only for `DRAFT_CREATED` and `APPROVED`;
+- requires CSRF and an explicit recreation confirmation checkbox;
+- reuses the existing prepared recipient/subject/body/CV profile;
+- supporting attachments are selected again; Portfolio is preselected when configured;
+- the replacement Gmail draft is created before the local draft reference changes;
+- successful recovery always ends in `DRAFT_CREATED`;
+- recovery from `APPROVED` clears `reviewed_at` and `review_note` so the replacement must be reviewed again;
+- `SENT` is never eligible;
+- no email is sent by recovery.
+
+This recovery flow is covered by regression tests and is pending live browser validation.
+
+
 ### Manual Review / Approval UI — live validated
 
 Application Detail now exposes real review actions backed by the existing store lifecycle:
