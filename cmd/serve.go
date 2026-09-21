@@ -79,6 +79,11 @@ Binds to localhost only by default.`,
 		mux.HandleFunc("POST /app/jobs/{id}/queue", ws.handleAppQueueApplication)
 		mux.HandleFunc("POST /app/applications/{id}/prepare", ws.handleAppPrepareApplication)
 		mux.HandleFunc("POST /app/applications/{id}/draft", ws.handleAppCreateGmailDraft)
+		mux.HandleFunc("POST /app/cv-profiles/upload", ws.handleCVProfileUpload)
+		mux.HandleFunc("POST /app/cv-profiles/{id}/default", ws.handleCVProfileDefault)
+		mux.HandleFunc("POST /app/cv-profiles/{id}/delete", ws.handleCVProfileDelete)
+		mux.HandleFunc("POST /app/cv-profiles/attachments/upload", ws.handleAttachmentUpload)
+		mux.HandleFunc("POST /app/cv-profiles/attachments/{id}/delete", ws.handleAttachmentDelete)
 		mux.HandleFunc("POST /app/gmail/connect", ws.handleGmailConnect)
 		mux.HandleFunc("GET /app/gmail/oauth/callback", ws.handleGmailOAuthCallback)
 		mux.HandleFunc("POST /app/gmail/disconnect", ws.handleGmailDisconnect)
@@ -133,6 +138,7 @@ type webServer struct {
 	filtersPath string
 	filtersMu   sync.Mutex
 	collectMu   sync.Mutex
+	documentMu  sync.Mutex
 	gmailOAuthMu sync.Mutex
 	gmailOAuth   map[string]gmailOAuthPending
 }
