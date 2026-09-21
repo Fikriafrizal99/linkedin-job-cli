@@ -26,12 +26,15 @@ type jobProcessResult struct {
 	Queued         int
 	Prepared       int
 	DraftCreated   int
-	ExistingDrafts int
-	NeedReview     int
+	ExistingDrafts  int
+	EasyApplyQueued int
+	EasyApplyExisting int
+	NeedReview      int
 	NonEmailSkipped int
-	Skipped        int
+	Skipped         int
 	Failed         int
 	ReviewIDs      []string
+	EasyApplyIDs   []string
 	FirstErr       error
 }
 
@@ -69,7 +72,7 @@ func (ws *webServer) handleAppBulkQueueJobs(w http.ResponseWriter, r *http.Reque
 			setJobProcessError(&result, fmt.Errorf("%s: %w", id, getErr))
 			continue
 		}
-		if !jobHasExplicitApplicationEmail(job) && !includeNeedReview {
+		if !jobHasExplicitApplicationEmail(job) && !jobIsEasyApply(job) && !includeNeedReview {
 			result.NonEmailSkipped++
 			continue
 		}
@@ -80,7 +83,10 @@ func (ws *webServer) handleAppBulkQueueJobs(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 		result.Queued++
-		if app.State == models.ApplicationStateNeedReview {
+		switch app.State {
+		case models.ApplicationStateReadyEasyApply:
+			result.EasyApplyQueued++
+		case models.ApplicationStateNeedReview:
 			result.NeedReview++
 		}
 	}
@@ -110,13 +116,11 @@ func (ws *webServer) handleAppProcessJobsToDraft(w http.ResponseWriter, r *http.
 		redirectJobBulkResult(w, r, "process", jobProcessResult{}, err)
 		return
 	}
-	creds, err := gmailclient.LoadCredentials("")
-	if err != nil {
-		redirectJobBulkResult(w, r, "process", jobProcessResult{}, fmt.Errorf("Gmail is not configured: %w", err))
-		return
-	}
-
+	creds, gmailErr := gmailclient.LoadCredentials("")
 	createDraft := func(ctx context.Context, payload appengine.DraftPayload) (gmailclient.DraftResult, error) {
+		if gmailErr != nil {
+			return gmailclient.DraftResult{}, fmt.Errorf("Gmail is not configured: %w", gmailErr)
+		}
 		itemCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 		defer cancel()
 		return gmailclient.CreateDraft(itemCtx, http.DefaultClient, creds, "", payload)
@@ -128,6 +132,10 @@ func (ws *webServer) handleAppProcessJobsToDraft(w http.ResponseWriter, r *http.
 
 	if len(result.ReviewIDs) > 0 {
 		redirectProcessedJobsToReview(w, r, result)
+		return
+	}
+	if len(result.EasyApplyIDs) > 0 {
+		redirectProcessedJobsToEasyApply(w, r, result)
 		return
 	}
 	redirectJobBulkResult(w, r, "process", result, result.FirstErr)
@@ -161,6 +169,14 @@ func processJobsToDraft(
 		seenReview[id] = true
 		result.ReviewIDs = append(result.ReviewIDs, id)
 	}
+	seenEasy := map[string]bool{}
+	addEasy := func(id string) {
+		if id == "" || seenEasy[id] {
+			return
+		}
+		seenEasy[id] = true
+		result.EasyApplyIDs = append(result.EasyApplyIDs, id)
+	}
 
 	for _, id := range ids {
 		id = strings.TrimSpace(id)
@@ -178,7 +194,7 @@ func processJobsToDraft(
 				setJobProcessError(&result, fmt.Errorf("%s: %w", id, getErr))
 				continue
 			}
-			if !jobHasExplicitApplicationEmail(job) {
+			if !jobHasExplicitApplicationEmail(job) && !jobIsEasyApply(job) {
 				result.NonEmailSkipped++
 				continue
 			}
@@ -189,9 +205,21 @@ func processJobsToDraft(
 				continue
 			}
 			result.Queued++
+			if app.State == models.ApplicationStateReadyEasyApply {
+				result.EasyApplyQueued++
+				addEasy(id)
+				continue
+			}
 		}
 
 		switch app.State {
+		case models.ApplicationStateReadyEasyApply, models.ApplicationStateInProgress:
+			result.EasyApplyExisting++
+			addEasy(id)
+			continue
+		case models.ApplicationStateApplied:
+			result.Skipped++
+			continue
 		case models.ApplicationStateNeedReview:
 			result.NeedReview++
 			continue
@@ -262,6 +290,14 @@ func jobHasExplicitApplicationEmail(job *models.JobPosting) bool {
 		strings.TrimSpace(job.ApplyEmail) != ""
 }
 
+func jobIsEasyApply(job *models.JobPosting) bool {
+	if job == nil {
+		return false
+	}
+	method := strings.ToUpper(strings.TrimSpace(job.ApplicationMethod))
+	return method == "LINKEDIN" || method == "EASY_APPLY"
+}
+
 func applicationIsPrepared(app *models.JobApplication) bool {
 	return app != nil &&
 		strings.TrimSpace(app.Subject) != "" &&
@@ -280,6 +316,9 @@ func redirectProcessedJobsToReview(w http.ResponseWriter, r *http.Request, resul
 	q.Set("ids", strings.Join(result.ReviewIDs, ","))
 	q.Set("pos", "0")
 	q.Set("job_process", "1")
+	if len(result.EasyApplyIDs) > 0 {
+		q.Set("easy_ids", strings.Join(result.EasyApplyIDs, ","))
+	}
 	addJobProcessResultQuery(q, result)
 	if result.FirstErr != nil {
 		msg := result.FirstErr.Error()
@@ -289,6 +328,22 @@ func redirectProcessedJobsToReview(w http.ResponseWriter, r *http.Request, resul
 		q.Set("job_process_error", msg)
 	}
 	http.Redirect(w, r, "/app/applications/review?"+q.Encode(), http.StatusSeeOther)
+}
+
+func redirectProcessedJobsToEasyApply(w http.ResponseWriter, r *http.Request, result jobProcessResult) {
+	q := url.Values{}
+	q.Set("ids", strings.Join(result.EasyApplyIDs, ","))
+	q.Set("pos", "0")
+	q.Set("job_process", "1")
+	addJobProcessResultQuery(q, result)
+	if result.FirstErr != nil {
+		msg := result.FirstErr.Error()
+		if len(msg) > 240 {
+			msg = msg[:240]
+		}
+		q.Set("job_process_error", msg)
+	}
+	http.Redirect(w, r, "/app/applications/easy-apply?"+q.Encode(), http.StatusSeeOther)
 }
 
 func redirectJobBulkResult(w http.ResponseWriter, r *http.Request, action string, result jobProcessResult, actionErr error) {
@@ -321,6 +376,8 @@ func addJobProcessResultQuery(q url.Values, result jobProcessResult) {
 	q.Set("prepared_count", strconv.Itoa(result.Prepared))
 	q.Set("draft_count", strconv.Itoa(result.DraftCreated))
 	q.Set("existing_draft_count", strconv.Itoa(result.ExistingDrafts))
+	q.Set("easy_apply_queued_count", strconv.Itoa(result.EasyApplyQueued))
+	q.Set("easy_apply_existing_count", strconv.Itoa(result.EasyApplyExisting))
 	q.Set("need_review_count", strconv.Itoa(result.NeedReview))
 	q.Set("non_email_skipped_count", strconv.Itoa(result.NonEmailSkipped))
 	q.Set("skipped_count", strconv.Itoa(result.Skipped))
