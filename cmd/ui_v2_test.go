@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -158,5 +159,73 @@ func TestSettingsAndCollectUIInteractionsRender(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+
+func TestParseUICollectFormBounds(t *testing.T) {
+	good, err := parseUICollectForm(url.Values{
+		"keywords": {"Sales Executive"},
+		"location": {"Indonesia"},
+		"posted_within": {"7d"},
+		"top": {"50"},
+	})
+	if err != nil {
+		t.Fatalf("valid collector form: %v", err)
+	}
+	if good.Top != 50 || good.WithSession || good.ForceOverwrite {
+		t.Fatalf("unexpected safe collector request: %+v", good)
+	}
+
+	for name, values := range map[string]url.Values{
+		"missing keywords": {"top": {"50"}},
+		"too many": {"keywords": {"Sales"}, "top": {"101"}},
+		"zero": {"keywords": {"Sales"}, "top": {"0"}},
+		"bad top": {"keywords": {"Sales"}, "top": {"abc"}},
+		"bad posted window": {"keywords": {"Sales"}, "top": {"50"}, "posted_within": {"forever"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseUICollectForm(values); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+func TestCollectUIRendersRealPostAction(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	pd := appPageData{
+		Title: "Collect LinkedIn Jobs",
+		Active: "collect",
+		CSRF: "csrf-real",
+		CandidateName: "Candidate",
+		CandidateInitials: "C",
+		CollectKeywords: "Sales Executive",
+		CollectLocation: "Indonesia",
+		CollectPostedWithin: "7d",
+		CollectTop: 50,
+	}
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, pd); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`method="post" action="/app/collect/run"`,
+		`name="csrf" value="csrf-real"`,
+		`name="keywords"`,
+		`name="top"`,
+		`id="collect-submit"`,
+		"Anonymous public collection only",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("collect UI missing %q", want)
+		}
+	}
+	if strings.Contains(out, `id="collect-submit" type="submit" disabled`) {
+		t.Fatal("collector submit must be enabled")
 	}
 }
