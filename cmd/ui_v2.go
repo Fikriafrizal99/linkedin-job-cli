@@ -979,13 +979,21 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
       {{range .Jobs}}<tr><td><a class="job-link" href="/app/jobs/{{.ID}}">{{.Title}}</a></td><td>{{.Company}}</td><td class="muted">{{.Location}}</td><td><span class="badge method-{{lower .Method}}">{{.Method}}</span></td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
       </tbody></table></div>{{else}}<div class="empty">No jobs collected yet.</div>{{end}}</div>
       <div class="panel">
-      {{if .SelectedApplication}}<div class="panel-head"><h2>Application Detail</h2>{{if .SelectedApplication.GmailDraftID}}<span class="sub">Gmail draft ready</span>{{end}}</div>
+      {{if .SelectedApplication}}<div class="panel-head"><h2>Application Detail</h2>{{if .SelectedApplication.GmailDraftID}}<span class="sub">Gmail draft ready</span>{{else if or (eq .SelectedApplication.State "READY_EASY_APPLY") (eq .SelectedApplication.State "IN_PROGRESS")}}<span class="sub">Manual LinkedIn flow</span>{{end}}</div>
         <div class="detail"><div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Application{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
-        <div class="meta"><span>Job ID: {{.SelectedApplication.JobID}}</span><span>✉ {{.SelectedApplication.Recipient}}</span></div>
-        <div class="tabs"><span class="tab active">Email</span><span class="tab">Details</span><span class="tab">Timeline</span></div>
-        <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
-        <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
-        <div class="detail-actions"><a class="btn ghost" href="/app/applications/{{.SelectedApplication.JobID}}">Open Detail</a></div></div>
+        {{if or (eq .SelectedApplication.State "READY_EASY_APPLY") (eq .SelectedApplication.State "IN_PROGRESS") (eq .SelectedApplication.State "APPLIED")}}
+          <div class="meta"><span>Job ID: {{.SelectedApplication.JobID}}</span><span>LinkedIn Easy Apply</span></div>
+          <div class="tabs"><span class="tab active">LinkedIn</span><span class="tab">Tracking</span></div>
+          <div class="info-row"><span>Opened</span><b>{{if .SelectedApplication.OpenedAt}}{{.SelectedApplication.OpenedAt}}{{else}}Not yet{{end}}</b></div>
+          <div class="info-row"><span>Applied</span><b>{{if .SelectedApplication.AppliedAt}}{{.SelectedApplication.AppliedAt}}{{else}}Not confirmed{{end}}</b></div>
+          <div class="detail-actions">{{if ne .SelectedApplication.State "APPLIED"}}<a class="btn primary" href="/app/applications/easy-apply?ids={{.SelectedApplication.JobID}}&pos=0">Open Easy Apply Queue</a>{{end}}<a class="btn ghost" href="/app/applications/{{.SelectedApplication.JobID}}">Open Detail</a></div>
+        {{else}}
+          <div class="meta"><span>Job ID: {{.SelectedApplication.JobID}}</span><span>✉ {{.SelectedApplication.Recipient}}</span></div>
+          <div class="tabs"><span class="tab active">Email</span><span class="tab">Details</span><span class="tab">Timeline</span></div>
+          <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
+          <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
+          <div class="detail-actions"><a class="btn ghost" href="/app/applications/{{.SelectedApplication.JobID}}">Open Detail</a></div>
+        {{end}}</div>
       {{else}}<div class="empty">No application records yet.</div>{{end}}
       </div>
     </section>
