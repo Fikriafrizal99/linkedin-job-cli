@@ -211,7 +211,10 @@ func SaveToken(path string, tok Token) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 func AccessToken(ctx context.Context, client *http.Client, creds Credentials, tokenPath string) (string, error) {
