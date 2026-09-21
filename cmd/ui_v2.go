@@ -1489,20 +1489,36 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   var selectAllJobs=document.getElementById('select-all-jobs'), jobChecks=Array.prototype.slice.call(document.querySelectorAll('.js-job-check')), selectedJobsCount=document.getElementById('selected-jobs-count'), queueJobsBtn=document.getElementById('queue-selected-jobs'), processJobsBtn=document.getElementById('process-selected-jobs');
   function updateSelectedJobs(){
     var n=jobChecks.filter(function(x){return x.checked}).length;
-    var processLimit=n>25, queueLimit=n>50, gmailOK=!processJobsBtn||processJobsBtn.getAttribute('data-gmail')==='1';
+    var processLimit=n>25, queueLimit=n>50;
     if(selectedJobsCount)selectedJobsCount.textContent=n+' selected'+(processLimit?' · Process max 25':'');
     if(selectAllJobs){selectAllJobs.checked=n>0&&n===jobChecks.length;selectAllJobs.indeterminate=n>0&&n<jobChecks.length;}
     if(queueJobsBtn){queueJobsBtn.disabled=n===0||queueLimit;queueJobsBtn.title=queueLimit?'Select at most 50 jobs':'';}
-    if(processJobsBtn){processJobsBtn.disabled=n===0||processLimit||!gmailOK;processJobsBtn.title=!gmailOK?'Connect Gmail first':(processLimit?'Select at most 25 jobs':'');}
+    if(processJobsBtn){processJobsBtn.disabled=n===0||processLimit;processJobsBtn.title=processLimit?'Select at most 25 jobs':'';}
     jobChecks.forEach(function(x){var row=x.closest('tr');if(row)row.classList.toggle('row-selected',x.checked);});
   }
   if(selectAllJobs){selectAllJobs.addEventListener('change',function(){jobChecks.forEach(function(x){x.checked=selectAllJobs.checked});updateSelectedJobs();});}
   jobChecks.forEach(function(x){x.addEventListener('change',updateSelectedJobs)});updateSelectedJobs();
-  var reviewNext=document.getElementById('review-next'), reviewPrev=document.getElementById('review-prev');
+  var easyOpenNext3=document.getElementById('easy-open-next3');
+  if(easyOpenNext3){
+    easyOpenNext3.addEventListener('click',function(){
+      var csrfMeta=document.querySelector('meta[name="csrf-token"]');
+      var csrf=csrfMeta?csrfMeta.content:'';
+      var targets=Array.prototype.slice.call(document.querySelectorAll('.easy-open-target')).slice(0,3);
+      targets.forEach(function(el){
+        var targetURL=el.getAttribute('data-url'), markURL=el.getAttribute('data-mark');
+        if(targetURL){window.open(targetURL,'_blank','noopener');}
+        if(markURL&&csrf){
+          fetch(markURL,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':csrf},body:'csrf='+encodeURIComponent(csrf)+'&no_redirect=1'}).catch(function(){});
+        }
+      });
+    });
+  }
+  var reviewNext=document.getElementById('review-next'), reviewPrev=document.getElementById('review-prev'), easyNext=document.getElementById('easy-next'), easyPrev=document.getElementById('easy-prev');
   document.addEventListener('keydown',function(e){
     if(e.target&&/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
-    if((e.key==='j'||e.key==='J'||e.key==='ArrowRight')&&reviewNext){window.location.href=reviewNext.href;}
-    if((e.key==='k'||e.key==='K'||e.key==='ArrowLeft')&&reviewPrev){window.location.href=reviewPrev.href;}
+    var next=reviewNext||easyNext, prev=reviewPrev||easyPrev;
+    if((e.key==='j'||e.key==='J'||e.key==='ArrowRight')&&next){window.location.href=next.href;}
+    if((e.key==='k'||e.key==='K'||e.key==='ArrowLeft')&&prev){window.location.href=prev.href;}
   });
 })();
 </script>
