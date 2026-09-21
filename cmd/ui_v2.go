@@ -1051,6 +1051,17 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         {{else if eq .SelectedApplication.State "DRAFT_CREATED"}}
           <div class="alert success" style="margin-top:16px">Gmail draft is created and ready for manual review.</div>
           <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a></div>
+          {{if and .GmailConnected .SelectedCVReady}}
+          <details style="margin-top:12px"><summary class="job-link" style="cursor:pointer">Draft missing or deleted? Recreate it</summary>
+            <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/recreate-draft" style="margin-top:12px" onsubmit="return confirm('Create a replacement Gmail draft? The old local draft reference will be replaced.')">
+              <input type="hidden" name="csrf" value="{{.CSRF}}">
+              {{if .Attachments}}<div class="attachment-picker">{{range .Attachments}}{{if .Exists}}<label class="checkline attachment-option"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}><span><b>{{.Label}}</b><small>{{.Kind}} · {{.FileName}}</small></span></label>{{end}}{{end}}</div>{{end}}
+              <label class="checkline"><input type="checkbox" name="recreate_confirm" value="1" required> I confirm the Gmail draft is missing/unusable and want a replacement draft.</label>
+              <div class="detail-actions"><button class="btn ghost" type="submit">Recreate Gmail Draft</button></div>
+            </form>
+            <div class="footer-note">The saved recipient, subject, body and CV profile are reused. The replacement remains DRAFT_CREATED and still requires review.</div>
+          </details>
+          {{end}}
           <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/approve" style="margin-top:14px">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <div class="form-group"><label>Review Note <span class="muted">(optional)</span></label><textarea name="review_note" maxlength="500" rows="3" placeholder="e.g. Recipient, subject, body, CV and portfolio checked in Gmail."></textarea></div>
