@@ -56,6 +56,7 @@ type appPageData struct {
 	SelectedCVPath string
 	SelectedCVReady bool
 	CVProfiles []appCVProfile
+	Attachments []appAttachment
 	DefaultCVProfile string
 	SettingsPath string
 	DBPath string
@@ -350,6 +351,9 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				Exists: exists,
 			})
 		}
+		for _, a := range settings.Application.Attachments {
+			pd.Attachments = append(pd.Attachments, attachmentView(a))
+		}
 	} else {
 		pd.Error = "Settings: " + settingsErr.Error()
 		pd.CandidateName = "Candidate"
@@ -396,6 +400,12 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		if draftID := strings.TrimSpace(r.URL.Query().Get("draft_id")); draftID != "" {
 			pd.ActionMessage += " Draft ID: " + draftID + "."
 		}
+	}
+	if fileErr := strings.TrimSpace(r.URL.Query().Get("file_error")); fileErr != "" {
+		pd.ActionError = fileErr
+	}
+	if fileMessage := strings.TrimSpace(r.URL.Query().Get("file_message")); fileMessage != "" {
+		pd.ActionMessage = fileMessage
 	}
 	if gmailErr := strings.TrimSpace(r.URL.Query().Get("gmail_error")); gmailErr != "" {
 		pd.ActionError = gmailErr
@@ -518,7 +528,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.SelectedCVPath, pd.SelectedCVReady = selectedCVStatus(settings.Application.CVProfiles, a.CVProfile)
 		}
 	case "cv-profiles":
-		pd.Active, pd.Title, pd.Subtitle = "cv-profiles", "CV Profiles", "Manage CV profiles used by deterministic application preparation."
+		pd.Active, pd.Title, pd.Subtitle = "cv-profiles", "CV Profiles", "Upload and manage CVs, portfolio, and supporting application files."
 	case "collect":
 		pd.Active, pd.Title, pd.Subtitle = "collect", "Collect LinkedIn Jobs", "Run the LinkedIn collector with your preferred search criteria."
 	case "settings":
@@ -671,6 +681,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 .settings-grid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px}.settings-menu button{display:block;width:100%;padding:10px 11px;border:0;border-radius:8px;color:#a9b9cb;background:transparent;text-align:left;cursor:pointer}.settings-menu button:hover{background:#112a43}.settings-menu button.active{background:#173b64;color:#76b4ff}.settings-pane{display:none}.settings-pane.active{display:block}.empty{padding:44px;text-align:center;color:#8194aa}
 .alert{padding:10px 13px;border:1px solid #6e4b25;background:#382919;color:#f1c178;border-radius:8px;margin-bottom:14px}.alert.success{border-color:#1f664d;background:#123a2e;color:#79ddb5}.collect-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:14px}.collect-summary .mini{background:#13283f;border:1px solid #29465f;border-radius:8px;padding:10px}.collect-summary b{display:block;font-size:18px}.collect-summary span{color:#8fa4bc;font-size:10px}
 .pipeline-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}.pipeline-mini{background:#10243a;border:1px solid #223d58;border-radius:10px;padding:12px 14px}.pipeline-mini b{font-size:20px;display:block}.pipeline-mini span{font-size:11px;color:#8fa4bc}.footer-note{color:#637991;font-size:11px;margin-top:14px}
+.upload-form{margin-top:14px}.checkline{display:flex;align-items:center;gap:9px;color:#b7c6d8;font-size:12px;margin-top:12px}.checkline input{width:auto}.inline-actions{display:flex;gap:8px;align-items:center;margin-top:14px}.inline-actions form{margin:0}.file-list{display:grid;gap:9px;margin-top:16px}.file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #29465f;border-radius:9px;background:#10243a}.file-card strong{display:block}.file-card small{display:block;color:#7f94ad;margin-top:3px;word-break:break-all}.attachment-picker{display:grid;gap:8px;margin-top:7px}.attachment-option{margin:0;padding:10px 12px;border:1px solid #29465f;border-radius:8px;background:#10243a}.attachment-option span{display:block}.attachment-option b,.attachment-option small{display:block}.attachment-option small{color:#7f94ad;margin-top:2px}
 @media(max-width:1400px) and (min-width:1051px){.main{padding-top:calc(var(--top) + 20px)}.page-head{margin-bottom:16px}.grid-kpi{gap:12px;margin-bottom:14px}.kpi{min-height:96px;padding:15px}.panel-head{height:54px}.detail{padding:16px}.email-body{min-height:145px}}
 @media(max-width:1050px){.grid-kpi{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.two-col,.collect-grid{grid-template-columns:1fr}.cv-grid{grid-template-columns:1fr 1fr}.quick-actions{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){:root{--sidebar:0px}.sidebar{display:none}.topbar{left:0}.main{margin-left:0;padding-left:14px;padding-right:14px}.grid-kpi,.cv-grid,.form-grid,.detail-grid{grid-template-columns:1fr}.top-user .name{display:none}.global-search{width:70vw}}
@@ -726,7 +737,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
     </section>
     <section class="quick-actions">
       <a class="quick" href="/app/collect"><strong>⌕ Collect Jobs</strong><small>Fetch latest jobs from LinkedIn</small></a>
-      <a class="quick" href="/app/cv-profiles"><strong>▤ Manage CVs</strong><small>Review configured CV profiles</small></a>
+      <a class="quick" href="/app/cv-profiles"><strong>▤ Manage CVs</strong><small>CV, portfolio & supporting files</small></a>
       <a class="quick" href="/app/applications"><strong>✓ View Applications</strong><small>Manage lifecycle states</small></a>
       <a class="quick" href="/app/settings"><strong>⚙ Settings</strong><small>Inspect preferences and paths</small></a>
     </section>
@@ -794,9 +805,17 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
             {{else if .GmailConnected}}
               <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/draft" style="margin-top:10px">
                 <input type="hidden" name="csrf" value="{{.CSRF}}">
-                <button class="btn primary" type="submit" style="width:100%">Create Gmail Draft</button>
+                {{if .Attachments}}
+                  <div class="field-label">Optional Attachments</div>
+                  <div class="attachment-picker">
+                  {{range .Attachments}}
+                    {{if .Exists}}<label class="checkline attachment-option"><input type="checkbox" name="attachment" value="{{.ID}}"><span><b>{{.Label}}</b><small>{{.Kind}} · {{.FileName}}{{if .Size}} · {{.Size}}{{end}}</small></span></label>{{end}}
+                  {{end}}
+                  </div>
+                {{end}}
+                <button class="btn primary" type="submit" style="width:100%;margin-top:12px">Create Gmail Draft</button>
               </form>
-              <div class="footer-note">Creates one Gmail draft with the configured CV attached. It does not send the email.</div>
+              <div class="footer-note">The selected CV is always attached. Portfolio or other supporting files are attached only when you tick them above. No email is sent.</div>
             {{else}}
               <div class="alert" style="margin-top:12px">Gmail is not connected. <a class="job-link" href="/app/settings?tab=email">Connect Gmail in Settings</a> before creating a draft.</div>
             {{end}}
@@ -835,10 +854,72 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   {{end}}
 
   {{if eq .Active "cv-profiles"}}
-    <div class="two-col">
-      <section>{{if .CVProfiles}}<div class="cv-grid">{{range .CVProfiles}}<article class="cv-card">{{if .Default}}<span class="cv-default">Default</span>{{end}}<h3>{{.ID}}</h3><div class="cv-path">{{.FileName}}</div><p>{{.Path}}</p>{{if .Exists}}<span class="badge state-approved">FILE READY</span>{{else}}<span class="badge state-need_review">FILE MISSING</span>{{end}}<div class="field-label">Keywords</div><p>{{if .Keywords}}{{.Keywords}}{{else}}No keyword rules configured.{{end}}</p><div class="field-label">Priority</div><p>{{.Priority}}</p><button class="btn ghost" disabled>Edit</button></article>{{end}}</div>{{else}}<div class="content-card"><div class="empty">No CV profiles configured in settings.yaml.</div></div>{{end}}</section>
-      <aside class="content-card"><div class="content-pad"><h2>Selection Rules</h2><p class="muted">CV selection is deterministic and uses the configuration already implemented in the application engine.</p><div class="info-row"><span>Configured profiles</span><b>{{len .CVProfiles}}</b></div><div class="info-row"><span>Default profile</span><b>{{.DefaultCVProfile}}</b></div><div class="info-row"><span>Title keyword weight</span><b>+5</b></div><div class="info-row"><span>Description keyword weight</span><b>+1</b></div><div class="info-row"><span>Tie breaker</span><b>Priority</b></div><div class="footer-note">Profile editing remains configuration-backed; this phase does not invent settings that are not persisted yet.</div></div></aside>
-    </div>
+    <section class="content-card"><div class="content-pad">
+      <div class="detail-title"><div><h2>CV Profiles</h2><p class="muted">Upload a new CV or use the same profile ID to replace/update an existing one.</p></div><span class="badge state-approved">{{len .CVProfiles}} PROFILES</span></div>
+      <form method="post" action="/app/cv-profiles/upload" enctype="multipart/form-data" class="upload-form">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <div class="form-grid">
+          <div class="form-group"><label>Profile ID</label><input name="profile_id" placeholder="general, sales, business-development" required maxlength="80"></div>
+          <div class="form-group"><label>CV File</label><input type="file" name="file" accept=".pdf,.doc,.docx" required></div>
+          <div class="form-group"><label>Keywords</label><input name="keywords" placeholder="sales, business development, account executive"></div>
+          <div class="form-group"><label>Priority</label><input name="priority" type="number" min="0" max="100" value="1"></div>
+        </div>
+        <label class="checkline"><input type="checkbox" name="set_default" value="1"> Set this profile as default</label>
+        <div class="detail-actions"><button class="btn primary" type="submit">Upload / Replace CV</button></div>
+        <div class="footer-note">Files are stored locally under ~/.linkedin-jobs/files. Uploading the same profile ID replaces its active CV path.</div>
+      </form>
+    </div></section>
+
+    {{if .CVProfiles}}
+      <div class="cv-grid" style="margin-top:14px">
+      {{range .CVProfiles}}
+        <article class="cv-card">
+          {{if .Default}}<span class="cv-default">Default</span>{{end}}
+          <h3>{{.ID}}</h3>
+          <div class="cv-path">{{.FileName}}</div>
+          <p>{{.Path}}</p>
+          {{if .Exists}}<span class="badge state-approved">FILE READY</span>{{else}}<span class="badge state-need_review">FILE MISSING</span>{{end}}
+          <div class="field-label">Keywords</div><p>{{if .Keywords}}{{.Keywords}}{{else}}No keyword rules configured.{{end}}</p>
+          <div class="field-label">Priority</div><p>{{.Priority}}</p>
+          <div class="inline-actions">
+            {{if not .Default}}<form method="post" action="/app/cv-profiles/{{.ID}}/default"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn ghost" type="submit">Set Default</button></form>{{end}}
+            <form method="post" action="/app/cv-profiles/{{.ID}}/delete" onsubmit="return confirm('Delete CV profile {{.ID}}?')"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn ghost" type="submit">Delete</button></form>
+          </div>
+        </article>
+      {{end}}
+      </div>
+    {{else}}
+      <div class="content-card" style="margin-top:14px"><div class="empty">No CV profiles yet. Upload your first CV above.</div></div>
+    {{end}}
+
+    <section class="content-card" style="margin-top:18px"><div class="content-pad">
+      <div class="detail-title"><div><h2>Additional Attachments</h2><p class="muted">Portfolio, cover letter, certificates, or other files you may want to attach to selected applications.</p></div><span class="badge method-email">{{len .Attachments}} FILES</span></div>
+      <form method="post" action="/app/cv-profiles/attachments/upload" enctype="multipart/form-data" class="upload-form">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <div class="form-grid">
+          <div class="form-group"><label>Label</label><input name="label" placeholder="Professional Portfolio 2026" required maxlength="100"></div>
+          <div class="form-group"><label>Type</label><select name="kind"><option value="portfolio">Portfolio</option><option value="cover_letter">Cover Letter</option><option value="certificate">Certificate</option><option value="other">Other</option></select></div>
+          <div class="form-group"><label>File</label><input type="file" name="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg" required></div>
+        </div>
+        <div class="detail-actions"><button class="btn primary" type="submit">Upload Attachment</button></div>
+      </form>
+
+      {{if .Attachments}}
+        <div class="file-list">
+        {{range .Attachments}}
+          <div class="file-card">
+            <div><strong>{{.Label}}</strong><small>{{.Kind}} · {{.FileName}}{{if .Size}} · {{.Size}}{{end}}</small><small>{{.Path}}</small></div>
+            <div>{{if .Exists}}<span class="badge state-approved">READY</span>{{else}}<span class="badge state-need_review">MISSING</span>{{end}}</div>
+            <form method="post" action="/app/cv-profiles/attachments/{{.ID}}/delete" onsubmit="return confirm('Delete attachment {{.Label}}?')"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn ghost" type="submit">Delete</button></form>
+          </div>
+        {{end}}
+        </div>
+      {{else}}
+        <div class="empty">No additional attachments uploaded yet.</div>
+      {{end}}
+    </div></section>
+
+    <section class="content-card" style="margin-top:18px"><div class="content-pad"><h2>Selection Rules</h2><p class="muted">CV selection remains deterministic; additional attachments are selected manually for each Gmail draft.</p><div class="detail-grid"><div class="info-card"><div class="info-row"><span>Configured profiles</span><b>{{len .CVProfiles}}</b></div><div class="info-row"><span>Default profile</span><b>{{.DefaultCVProfile}}</b></div></div><div class="info-card"><div class="info-row"><span>Additional files</span><b>{{len .Attachments}}</b></div><div class="info-row"><span>Attachment behavior</span><b>Manual per application</b></div></div></div></div></section>
   {{end}}
 
   {{if eq .Active "collect"}}
