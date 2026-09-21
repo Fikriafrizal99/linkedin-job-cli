@@ -142,23 +142,79 @@ var authImportCmd = &cobra.Command{
 }
 
 func normalizeImportedCookieHeader(raw string) string {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	raw = strings.ReplaceAll(raw, "\r", "\n")
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
 	}
+
+	// Chrome/Edge "Copy request headers" can wrap a long Cookie header across
+	// multiple physical clipboard lines. Collect the Cookie line plus any
+	// continuation lines until the next HTTP header starts.
 	if strings.Contains(raw, "\n") {
-		for _, line := range strings.Split(raw, "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(strings.ToLower(line), "cookie:") {
-				raw = strings.TrimSpace(line[len("cookie:"):])
-				break
+		lines := strings.Split(raw, "\n")
+		var cookieParts []string
+		collecting := false
+
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+
+			lower := strings.ToLower(trimmed)
+			if strings.HasPrefix(lower, "cookie:") {
+				collecting = true
+				part := strings.TrimSpace(trimmed[len("cookie:"):])
+				if part != "" {
+					cookieParts = append(cookieParts, part)
+				}
+				continue
+			}
+
+			if collecting {
+				if looksLikeHTTPHeaderLine(trimmed) {
+					break
+				}
+				cookieParts = append(cookieParts, trimmed)
 			}
 		}
+
+		if len(cookieParts) > 0 {
+			raw = strings.Join(cookieParts, " ")
+		}
 	}
+
 	if strings.HasPrefix(strings.ToLower(raw), "cookie:") {
 		raw = strings.TrimSpace(raw[len("cookie:"):])
 	}
 	return strings.TrimSpace(strings.TrimSuffix(raw, ";"))
+}
+
+// looksLikeHTTPHeaderLine identifies the beginning of the next copied request
+// header. HTTP/2 pseudo-headers (:authority, :method) count as headers too.
+func looksLikeHTTPHeaderLine(line string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return false
+	}
+	if strings.HasPrefix(line, ":") {
+		return strings.Count(line, ":") >= 2
+	}
+	idx := strings.IndexByte(line, ':')
+	if idx <= 0 {
+		return false
+	}
+	for _, r := range line[:idx] {
+		if !((r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			strings.ContainsRune("!#$%&'*+-.^_|~", r)) {
+			return false
+		}
+	}
+	return true
 }
 
 func cookieHeaderHas(header, name string) bool {
