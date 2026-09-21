@@ -2,11 +2,15 @@ package cmd
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"linkedin-jobs/internal/models"
+	"linkedin-jobs/internal/store"
 )
 
 func TestAppTemplateParses(t *testing.T) {
@@ -227,5 +231,149 @@ func TestCollectUIRendersRealPostAction(t *testing.T) {
 	}
 	if strings.Contains(out, `id="collect-submit" type="submit" disabled`) {
 		t.Fatal("collector submit must be enabled")
+	}
+}
+
+
+func TestQueueApplicationWebActionReadyEmail(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "queue-ready.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "4467841092",
+		Title: "Sales Executive",
+		Company: "CeoJetset",
+		URL: "https://www.linkedin.com/jobs/view/4467841092",
+		ApplicationMethod: "EMAIL",
+		ApplyEmail: "jobs@example.com",
+	}
+	if err := st.Upsert(job); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	form := url.Values{"csrf": {"csrf-test"}}
+	req := httptest.NewRequest(http.MethodPost, "/app/jobs/4467841092/queue", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "4467841092")
+	rec := httptest.NewRecorder()
+
+	ws.handleAppQueueApplication(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/app/applications/4467841092?queued=1" {
+		t.Fatalf("redirect=%q", loc)
+	}
+
+	app, err := st.GetApplicationByJobID("4467841092")
+	if err != nil {
+		t.Fatalf("GetApplicationByJobID: %v", err)
+	}
+	if app == nil || app.State != models.ApplicationStateReadyEmail || app.Recipient != "jobs@example.com" {
+		t.Fatalf("unexpected queued application: %+v", app)
+	}
+}
+
+func TestQueueApplicationWebActionNeedReview(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "queue-review.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "4468614708",
+		Title: "Industrial Account Executive",
+		Company: "Michael Page",
+		URL: "https://www.linkedin.com/jobs/view/4468614708",
+		ApplicationMethod: "UNKNOWN",
+	}
+	if err := st.Upsert(job); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	form := url.Values{"csrf": {"csrf-test"}}
+	req := httptest.NewRequest(http.MethodPost, "/app/jobs/4468614708/queue", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "4468614708")
+	rec := httptest.NewRecorder()
+
+	ws.handleAppQueueApplication(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	app, err := st.GetApplicationByJobID("4468614708")
+	if err != nil {
+		t.Fatalf("GetApplicationByJobID: %v", err)
+	}
+	if app == nil || app.State != models.ApplicationStateNeedReview || app.Recipient != "" {
+		t.Fatalf("unexpected review application: %+v", app)
+	}
+}
+
+func TestQueueApplicationWebActionRejectsBadCSRF(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "queue-csrf.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	ws := &webServer{st: st, csrf: "expected"}
+	form := url.Values{"csrf": {"wrong"}}
+	req := httptest.NewRequest(http.MethodPost, "/app/jobs/12345/queue", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "12345")
+	rec := httptest.NewRecorder()
+
+	ws.handleAppQueueApplication(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d want 403", rec.Code)
+	}
+}
+
+func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	job := &models.JobPosting{
+		ID: "12345",
+		Title: "Sales Executive",
+		Company: "Example Co",
+		ApplicationMethod: "EMAIL",
+		ApplyEmail: "jobs@example.com",
+	}
+
+	var fresh bytes.Buffer
+	if err := tpl.Execute(&fresh, appPageData{
+		Title: "Job Detail", Active: "jobs", CSRF: "csrf",
+		CandidateName: "Candidate", CandidateInitials: "C",
+		SelectedJob: job,
+	}); err != nil {
+		t.Fatalf("execute fresh detail: %v", err)
+	}
+	if !strings.Contains(fresh.String(), `action="/app/jobs/12345/queue"`) ||
+		!strings.Contains(fresh.String(), "Queue Application") ||
+		!strings.Contains(fresh.String(), "READY_EMAIL") {
+		t.Fatalf("fresh job detail missing queue UI: %s", fresh.String())
+	}
+
+	var queued bytes.Buffer
+	if err := tpl.Execute(&queued, appPageData{
+		Title: "Job Detail", Active: "jobs", CSRF: "csrf",
+		CandidateName: "Candidate", CandidateInitials: "C",
+		SelectedJob: job,
+		SelectedApplication: &models.JobApplication{JobID: "12345", State: models.ApplicationStateReadyEmail},
+	}); err != nil {
+		t.Fatalf("execute queued detail: %v", err)
+	}
+	if !strings.Contains(queued.String(), "View Application") ||
+		strings.Contains(queued.String(), "Queue Application") {
+		t.Fatalf("queued job detail should show view action only")
 	}
 }
