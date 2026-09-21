@@ -74,6 +74,8 @@ type appPageData struct {
 	CollectPersisted int
 	CollectExactDuplicates int
 	CollectLikelyReposts int
+	ActionMessage string
+	ActionError string
 	Error string
 }
 
@@ -199,6 +201,25 @@ func redirectCollectResult(w http.ResponseWriter, r *http.Request, req collectRe
 	http.Redirect(w, r, "/app/collect?"+q.Encode(), http.StatusSeeOther)
 }
 
+func (ws *webServer) handleAppQueueApplication(w http.ResponseWriter, r *http.Request) {
+	if !ws.checkCSRF(w, r) {
+		return
+	}
+	jobID := strings.TrimSpace(r.PathValue("id"))
+	if jobID == "" {
+		http.Error(w, "missing job id", http.StatusBadRequest)
+		return
+	}
+	a, err := ws.st.QueueApplication(jobID)
+	if err != nil {
+		q := url.Values{"action_error": {err.Error()}}
+		http.Redirect(w, r, "/app/jobs/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
+		return
+	}
+	q := url.Values{"queued": {"1"}}
+	http.Redirect(w, r, "/app/applications/"+url.PathEscape(a.JobID)+"?"+q.Encode(), http.StatusSeeOther)
+}
+
 func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd := appPageData{
 		CSRF: ws.csrf, Active: "dashboard", Title: "Dashboard",
@@ -261,6 +282,10 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 100 { pd.CollectTop = n }
 	}
 	pd.CollectError = strings.TrimSpace(r.URL.Query().Get("collect_error"))
+	pd.ActionError = strings.TrimSpace(r.URL.Query().Get("action_error"))
+	if r.URL.Query().Get("queued") == "1" {
+		pd.ActionMessage = "Application queued successfully."
+	}
 	if r.URL.Query().Get("collect") == "done" {
 		pd.CollectSearched, _ = strconv.Atoi(r.URL.Query().Get("searched"))
 		pd.CollectNew, _ = strconv.Atoi(r.URL.Query().Get("new"))
@@ -338,6 +363,10 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.SelectedJob = jobByID[parts[1]]
 			if pd.SelectedJob == nil {
 				return pd, fmt.Errorf("job %s not found", parts[1])
+			}
+			pd.SelectedApplication, err = ws.st.GetApplicationByJobID(parts[1])
+			if err != nil {
+				return pd, err
 			}
 		}
 	case "applications":
@@ -525,6 +554,8 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 </header>
 <main class="main">
   {{if .Error}}<div class="alert">{{.Error}}</div>{{end}}
+  {{if .ActionError}}<div class="alert">{{.ActionError}}</div>{{end}}
+  {{if .ActionMessage}}<div class="alert success">{{.ActionMessage}}</div>{{end}}
   <div class="page-head"><div><h1>{{.Title}}</h1><p>{{.Subtitle}}</p></div>{{if eq .Active "dashboard"}}<a class="btn primary" href="/app/collect">＋ Collect New Jobs</a>{{end}}</div>
 
   {{if eq .Active "dashboard"}}
@@ -569,7 +600,18 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
           </div>
           <div class="field-label">Description</div><div class="field email-body">{{if .SelectedJob.ShortDescription}}{{.SelectedJob.ShortDescription}}{{else}}{{.SelectedJob.Description}}{{end}}</div>
         </div></div>
-        <aside class="content-card"><div class="content-pad"><h3>Application</h3><p class="muted">Explicit data extracted from the posting.</p><div class="info-row"><span>Method</span><b>{{.SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Email</span><b>{{.SelectedJob.ApplyEmail}}</b></div>{{if .SelectedJob.ApplyURL}}<a class="btn ghost" style="display:block;text-align:center;margin-top:12px" target="_blank" href="{{.SelectedJob.ApplyURL}}">Open Apply URL ↗</a>{{end}}</div></aside>
+        <aside class="content-card"><div class="content-pad"><h3>Application</h3><p class="muted">Explicit data extracted from the posting.</p><div class="info-row"><span>Method</span><b>{{.SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Email</span><b>{{if .SelectedJob.ApplyEmail}}{{.SelectedJob.ApplyEmail}}{{else}}—{{end}}</b></div>
+        {{if .SelectedApplication}}
+          <div class="info-row"><span>Pipeline State</span><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
+          <a class="btn primary" style="display:block;text-align:center;margin-top:12px" href="/app/applications/{{.SelectedJob.ID}}">View Application</a>
+        {{else}}
+          <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/queue" style="margin-top:12px">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <button class="btn primary" type="submit" style="width:100%">Queue Application</button>
+          </form>
+          <div class="footer-note">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}This job will enter READY_EMAIL.{{else}}No explicit email detected; this job will enter NEED_REVIEW.{{end}}</div>
+        {{end}}
+        {{if .SelectedJob.ApplyURL}}<a class="btn ghost" style="display:block;text-align:center;margin-top:8px" target="_blank" rel="noreferrer" href="{{.SelectedJob.ApplyURL}}">Open Apply URL ↗</a>{{end}}</div></aside>
       </section>
     {{else}}
       <form class="toolbar" method="get" action="/app/jobs">
