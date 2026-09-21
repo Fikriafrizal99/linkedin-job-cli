@@ -258,7 +258,7 @@ It delegates to the existing deterministic Application Engine:
 
 Re-preparation remains available while a record is still `READY_EMAIL`. Once it reaches `DRAFT_CREATED`, `APPROVED`, or `SENT`, existing backend lifecycle guards prevent silent re-preparation. The prepare action has been live-validated in the user's local browser.
 
-### Native Gmail Draft — implemented, pending live validation
+### Native Gmail OAuth — live validated / Draft creation pending live validation
 
 The local web application now supports native Gmail OAuth and draft creation without depending on the ChatGPT Gmail connector.
 
@@ -285,6 +285,8 @@ Implementation boundaries:
 - no send occurs;
 - the UI blocks draft creation if the selected CV file is missing;
 - Gmail OAuth is restricted to a local loopback host.
+
+Gmail OAuth connection has been live-validated in the user's local browser. Native draft creation remains pending live validation.
 
 See `docs/GMAIL_SETUP.md` for setup instructions.
 
