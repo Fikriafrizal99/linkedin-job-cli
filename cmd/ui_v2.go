@@ -879,8 +879,13 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
           <div class="cv-path">{{.FileName}}</div>
           <p>{{.Path}}</p>
           {{if .Exists}}<span class="badge state-approved">FILE READY</span>{{else}}<span class="badge state-need_review">FILE MISSING</span>{{end}}
-          <div class="field-label">Keywords</div><p>{{if .Keywords}}{{.Keywords}}{{else}}No keyword rules configured.{{end}}</p>
-          <div class="field-label">Priority</div><p>{{.Priority}}</p>
+          <form method="post" action="/app/cv-profiles/{{.ID}}/update" style="margin-top:14px">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <div class="form-group"><label>Keywords</label><input name="keywords" value="{{.Keywords}}" placeholder="sales, business development"></div>
+            <div class="form-group" style="margin-top:8px"><label>Priority</label><input name="priority" type="number" min="0" max="100" value="{{.Priority}}"></div>
+            {{if not .Default}}<label class="checkline"><input type="checkbox" name="set_default" value="1"> Set as default CV</label>{{end}}
+            <div class="inline-actions"><button class="btn ghost" type="submit">Save Changes</button></div>
+          </form>
           <div class="inline-actions">
             {{if not .Default}}<form method="post" action="/app/cv-profiles/{{.ID}}/default"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn ghost" type="submit">Set Default</button></form>{{end}}
             <form method="post" action="/app/cv-profiles/{{.ID}}/delete" onsubmit="return confirm('Delete CV profile {{.ID}}?')"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn ghost" type="submit">Delete</button></form>
