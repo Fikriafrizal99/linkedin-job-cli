@@ -496,3 +496,120 @@ func TestRemoveApplicationRejectsDraftCreatedAndLater(t *testing.T) {
 		t.Fatalf("protected application changed: %+v", app)
 	}
 }
+
+
+func TestQueueApplicationReadyEasyApply(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-easy-apply")
+	j.ApplicationMethod = "LINKEDIN"
+	j.URL = "https://www.linkedin.com/jobs/view/123456/"
+	if err := st.Upsert(j); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := st.QueueApplication(j.ID)
+	if err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if a.State != models.ApplicationStateReadyEasyApply {
+		t.Fatalf("state=%q want READY_EASY_APPLY", a.State)
+	}
+	if a.ApplyURL != j.URL {
+		t.Fatalf("apply_url=%q want %q", a.ApplyURL, j.URL)
+	}
+	if a.Recipient != "" {
+		t.Fatalf("Easy Apply recipient should be empty, got %q", a.Recipient)
+	}
+}
+
+func TestEasyApplyLifecycleOpenedThenApplied(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-easy-lifecycle")
+	j.ApplicationMethod = "LINKEDIN"
+	j.URL = "https://www.linkedin.com/jobs/view/987654/"
+	if err := st.Upsert(j); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	opened, err := st.MarkEasyApplyOpened(j.ID)
+	if err != nil {
+		t.Fatalf("MarkEasyApplyOpened: %v", err)
+	}
+	if opened.State != models.ApplicationStateInProgress || opened.OpenedAt == "" {
+		t.Fatalf("opened=%+v", opened)
+	}
+	if opened.AppliedAt != "" {
+		t.Fatalf("applied_at should still be empty: %+v", opened)
+	}
+
+	applied, err := st.MarkEasyApplyApplied(j.ID, "sales")
+	if err != nil {
+		t.Fatalf("MarkEasyApplyApplied: %v", err)
+	}
+	if applied.State != models.ApplicationStateApplied || applied.AppliedAt == "" {
+		t.Fatalf("applied=%+v", applied)
+	}
+	if applied.CVProfile != "sales" {
+		t.Fatalf("cv_profile=%q", applied.CVProfile)
+	}
+	if _, err := st.MarkEasyApplyOpened(j.ID); err == nil {
+		t.Fatal("APPLIED record must not reopen into IN_PROGRESS")
+	}
+}
+
+func TestEasyApplyAppliedRequiresOpenFirst(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-easy-gate")
+	j.ApplicationMethod = "LINKEDIN"
+	j.URL = "https://www.linkedin.com/jobs/view/111111/"
+	if err := st.Upsert(j); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(j.ID); err != nil { t.Fatal(err) }
+
+	if _, err := st.MarkEasyApplyApplied(j.ID, "general"); err == nil {
+		t.Fatal("expected READY_EASY_APPLY to require explicit open first")
+	}
+}
+
+func TestRemoveApplicationAllowsEasyApplyBeforeSubmission(t *testing.T) {
+	st := tmpDB(t)
+	for _, tc := range []struct{
+		id string
+		open bool
+	}{
+		{id: "easy-remove-ready"},
+		{id: "easy-remove-progress", open: true},
+	} {
+		j := sampleJob(tc.id)
+		j.ApplicationMethod = "LINKEDIN"
+		j.URL = "https://www.linkedin.com/jobs/view/" + tc.id + "/"
+		if err := st.Upsert(j); err != nil { t.Fatal(err) }
+		if _, err := st.QueueApplication(j.ID); err != nil { t.Fatal(err) }
+		if tc.open {
+			if _, err := st.MarkEasyApplyOpened(j.ID); err != nil { t.Fatal(err) }
+		}
+		if err := st.RemoveApplication(j.ID); err != nil {
+			t.Fatalf("RemoveApplication %s: %v", tc.id, err)
+		}
+		if app, err := st.GetApplicationByJobID(j.ID); err != nil || app != nil {
+			t.Fatalf("%s still queued: %+v err=%v", tc.id, app, err)
+		}
+	}
+}
+
+func TestRemoveApplicationRejectsAppliedEasyApply(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("easy-remove-applied")
+	j.ApplicationMethod = "LINKEDIN"
+	j.URL = "https://www.linkedin.com/jobs/view/222222/"
+	if err := st.Upsert(j); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(j.ID); err != nil { t.Fatal(err) }
+	if _, err := st.MarkEasyApplyOpened(j.ID); err != nil { t.Fatal(err) }
+	if _, err := st.MarkEasyApplyApplied(j.ID, "general"); err != nil { t.Fatal(err) }
+
+	if err := st.RemoveApplication(j.ID); err == nil {
+		t.Fatal("expected APPLIED Easy Apply record to be protected")
+	}
+}
