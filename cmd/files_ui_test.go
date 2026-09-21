@@ -193,6 +193,21 @@ func TestFriendlyAttachmentNameAndDraftBody(t *testing.T) {
 		t.Fatalf("friendly name=%q", got)
 	}
 
+	dir := t.TempDir()
+	stored := filepath.Join(dir, "portofolio-123.pdf")
+	if err := os.WriteFile(stored, []byte("%PDF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := resolveAttachments([]config.AttachmentSettings{{
+		ID: "portfolio-1", Label: "Portofolio", Kind: "portfolio", Path: stored,
+	}}, []string{"portfolio-1"}, "Mochamad Fikri Afrizal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolved) != 1 || resolved[0].Name != "Mochamad_Fikri_Afrizal_Portfolio.pdf" {
+		t.Fatalf("resolved=%+v", resolved)
+	}
+
 	body := "Dear Hiring Team,\n\nPlease find my CV attached for your review.\n\nKind regards,"
 	withPortfolio := draftBodyForAttachments(body, []resolvedAttachment{{Kind: "portfolio"}})
 	if !strings.Contains(withPortfolio, "Please find my CV and portfolio attached for your review.") {
