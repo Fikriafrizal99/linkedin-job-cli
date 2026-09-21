@@ -10,6 +10,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/mail"
 	"net/textproto"
 	"os"
 	"path/filepath"
@@ -93,10 +94,20 @@ func createDraftAt(ctx context.Context, client *http.Client, creds Credentials, 
 }
 
 func BuildMIME(payload appengine.DraftPayload) ([]byte, error) {
-	if strings.TrimSpace(payload.To) == "" {
+	to := strings.TrimSpace(payload.To)
+	subject := strings.TrimSpace(payload.Subject)
+	if to == "" {
 		return nil, fmt.Errorf("draft recipient is empty")
 	}
-	if strings.TrimSpace(payload.Subject) == "" {
+	if strings.ContainsAny(to, "\r\n") || strings.ContainsAny(subject, "\r\n") {
+		return nil, fmt.Errorf("draft headers contain invalid newline characters")
+	}
+	addr, err := mail.ParseAddress(to)
+	if err != nil || strings.TrimSpace(addr.Address) == "" {
+		return nil, fmt.Errorf("invalid draft recipient %q", to)
+	}
+	to = addr.Address
+	if subject == "" {
 		return nil, fmt.Errorf("draft subject is empty")
 	}
 	if strings.TrimSpace(payload.Body) == "" {
@@ -156,8 +167,8 @@ func BuildMIME(payload appengine.DraftPayload) ([]byte, error) {
 	}
 
 	var msg bytes.Buffer
-	fmt.Fprintf(&msg, "To: %s\r\n", payload.To)
-	fmt.Fprintf(&msg, "Subject: %s\r\n", payload.Subject)
+	fmt.Fprintf(&msg, "To: %s\r\n", to)
+	fmt.Fprintf(&msg, "Subject: %s\r\n", mime.QEncoding.Encode("UTF-8", subject))
 	fmt.Fprint(&msg, "MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&msg, "Content-Type: multipart/mixed; boundary=%q\r\n", mw.Boundary())
 	fmt.Fprint(&msg, "\r\n")
