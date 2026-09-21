@@ -39,16 +39,19 @@ The UI implementation should contain these screens in this order:
    - Application quick action only when supported by current workflow.
 
 4. **Applications**
-   - Application queue table.
+   - Application workbench / queue table.
    - Lifecycle filters for `READY_EMAIL`, `DRAFT_CREATED`, `APPROVED`, and `SENT`.
    - Search/filter by company, method, state, and date.
-   - Selecting a record opens Application Detail.
+   - Multi-select batch actions for Prepare, Create Drafts, Review, and Confirm Send.
+   - Supporting-file selection for batch draft creation.
+   - Review Draft Queue shortcut for sequential human review.
+   - Selecting a record still opens Application Detail.
 
 5. **Application Detail**
    - Recipient, subject, email body, CV profile, Gmail draft id, review state, and provider metadata.
    - Tabs/sections for Email, CV & Files, Timeline, and Notes only where backed by real data.
    - Actions map directly to the existing lifecycle.
-   - `Send (Optional)` remains explicit and manual.
+   - Sending remains explicit: APPROVED records must pass a separate final confirmation page before Gmail `drafts.send` is called.
 
 6. **CV Profiles**
    - This is the single file-management page; do not add a separate Documents navigation item.
@@ -158,7 +161,8 @@ The visual design must be backed by the existing repository workflow rather than
 
 ## Safety / product constraints
 
-- `Send` remains a separate explicit/manual phase and is not wired by the review UI.
+- `Send` remains a separate explicit/manual phase after review approval.
+- Explicit send is wired only behind a dedicated final confirmation screen and checkbox.
 - Never auto-send email.
 - Never auto-apply on LinkedIn.
 - Never auto-DM or auto-connect.
@@ -188,7 +192,7 @@ The repository now contains the first implementation of the complete page family
 - `/app/collect`
 - `/app/settings`
 
-Dashboard, Jobs, Applications, CV Profiles, and Settings are populated from the existing SQLite/config data. Later Phase 3 work wires collector, preparation, Gmail draft creation, CV/file management, and manual review actions to the existing lifecycle guards. Sending remains a separate explicit phase.
+Dashboard, Jobs, Applications, CV Profiles, and Settings are populated from the existing SQLite/config data. Phase 3 wiring now covers collector, preparation, Gmail draft creation, CV/file management, manual review, application batch processing, and explicit Gmail sending behind a final human confirmation gate.
 
 The former server-rendered jobs browser is retained at `/legacy` during migration so existing filtering/status/delete regression coverage is not discarded.
 
@@ -331,9 +335,52 @@ Behavior:
 - approval does not send email;
 - an approved application can be explicitly reopened with `Unapprove & Reopen Review`;
 - unapprove keeps the existing Gmail draft ID and returns `APPROVED → DRAFT_CREATED`;
-- no send POST action is exposed by this phase.
+- approval itself exposes no send side effect; sending remains a separate explicit confirmation flow.
 
 This UI wiring is covered by regression tests and has been live-validated in the user's local browser.
+
+### Application Workbench + Batch Workflow — implemented, pending live validation
+
+The Applications page is now the high-throughput operating surface for multiple records.
+
+Batch actions:
+
+```text
+POST /app/applications/bulk/prepare
+POST /app/applications/bulk/draft
+POST /app/applications/bulk/review
+POST /app/applications/send-confirm
+POST /app/applications/bulk/send
+```
+
+Review queue:
+
+```text
+GET /app/applications/review
+```
+
+Behavior:
+
+- **Select all visible** plus per-row checkboxes avoid opening application details one by one;
+- **Prepare Selected** runs the existing deterministic prepare engine across selected `READY_EMAIL` records;
+- **Create Drafts** creates native Gmail drafts sequentially for selected prepared records;
+- the batch toolbar exposes supporting-file checkboxes; Portfolio is preselected but remains user-controllable;
+- **Review Selected** opens a sequential Review Queue;
+- **Review Draft Queue** opens all current `DRAFT_CREATED` records;
+- Review Queue supports Previous, Skip/Next, `Approve & Next`, and J/K or arrow-key navigation;
+- approval stays a human decision and never sends email;
+- approved rows can enter **Confirm Send**;
+- the final confirmation page lists recipient, subject, job/company, and Gmail draft ID;
+- an explicit final checkbox is required before calling Gmail `drafts.send`;
+- successful provider sends are persisted as `SENT` with message/thread IDs;
+- Gmail-facing draft/send batches are capped at 25 records; preparation/review selection is capped at 50;
+- lifecycle writes are serialized in the local server to reduce conflicting updates.
+
+There is still no auto-apply, auto-approval, or auto-send.
+
+See `docs/APPLICATION_WORKBENCH.md` for the operating workflow and safety boundaries.
+
+This phase is implemented with regression coverage and is pending live browser validation.
 
 
 
