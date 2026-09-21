@@ -1,12 +1,15 @@
 package models
 
 const (
-	ApplicationStateReadyEmail   = "READY_EMAIL"
-	ApplicationStateNeedReview   = "NEED_REVIEW"
-	ApplicationStateDraftCreated = "DRAFT_CREATED"
-	ApplicationStateApproved     = "APPROVED"
-	ApplicationStateSent         = "SENT"
-	ApplicationStateFailed       = "FAILED"
+	ApplicationStateReadyEmail     = "READY_EMAIL"
+	ApplicationStateReadyEasyApply = "READY_EASY_APPLY"
+	ApplicationStateInProgress     = "IN_PROGRESS"
+	ApplicationStateApplied        = "APPLIED"
+	ApplicationStateNeedReview     = "NEED_REVIEW"
+	ApplicationStateDraftCreated   = "DRAFT_CREATED"
+	ApplicationStateApproved       = "APPROVED"
+	ApplicationStateSent           = "SENT"
+	ApplicationStateFailed         = "FAILED"
 )
 
 // JobApplication is the Application Engine's lifecycle record for one collected
@@ -22,11 +25,14 @@ type JobApplication struct {
 	GmailDraftID   string `json:"gmail_draft_id,omitempty"`
 	GmailMessageID string `json:"gmail_message_id,omitempty"`
 	GmailThreadID  string `json:"gmail_thread_id,omitempty"`
+	ApplyURL       string `json:"apply_url,omitempty"`
 	LastError      string `json:"last_error,omitempty"`
 	CreatedAt      string `json:"created_at,omitempty"`
 	UpdatedAt      string `json:"updated_at,omitempty"`
 	DraftCreatedAt string `json:"draft_created_at,omitempty"`
 	ReviewedAt     string `json:"reviewed_at,omitempty"`
 	ReviewNote     string `json:"review_note,omitempty"`
+	OpenedAt       string `json:"opened_at,omitempty"`
+	AppliedAt      string `json:"applied_at,omitempty"`
 	SentAt         string `json:"sent_at,omitempty"`
 }
