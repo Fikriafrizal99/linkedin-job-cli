@@ -24,6 +24,58 @@ SENT
 
 There is no automatic LinkedIn apply, automatic approval, or automatic email send.
 
+## Database Jobs → Review Queue
+
+The Jobs database is now the intake surface for high-volume application processing. You no longer need to open and queue each collected job individually.
+
+Routes:
+
+```text
+POST /app/jobs/bulk/queue
+POST /app/jobs/bulk/process-to-draft
+```
+
+### Queue Selected
+
+- select up to 50 visible jobs from the filtered Jobs table;
+- only jobs without an existing application record are newly queued;
+- explicit EMAIL + recipient becomes `READY_EMAIL`;
+- jobs without an explicit application recipient become `NEED_REVIEW`;
+- existing application records are skipped rather than overwritten;
+- the current Jobs filters are preserved after the action.
+
+### Process Selected to Draft
+
+`Process Selected to Draft` is the fast path from the collector database into human review:
+
+```text
+selected Jobs
+    ↓
+Queue when needed
+    ↓
+deterministic Prepare when needed
+    ↓
+Gmail drafts.create
+    ↓
+DRAFT_CREATED
+    ↓
+Review Queue
+```
+
+Rules:
+
+- maximum 25 selected jobs per process-to-draft batch;
+- existing `DRAFT_CREATED` records are not duplicated; they are added directly to the resulting Review Queue;
+- `APPROVED` and `SENT` records are skipped;
+- `NEED_REVIEW` records stop before preparation/draft creation;
+- the app never guesses a missing recipient;
+- supporting-file selections in the Jobs toolbar apply to each newly created draft;
+- Portfolio is preselected when configured, but remains user-controllable;
+- Gmail must be connected before this action is available;
+- the action never approves or sends email.
+
+After at least one draft is available, the browser redirects directly to the Review Queue containing the eligible selected records.
+
 ## Batch actions
 
 The Applications table supports multi-select with **Select all visible**.
@@ -231,4 +283,4 @@ Backend/unit regression coverage is included for:
 - Review Queue rendering;
 - final send confirmation rendering.
 
-The new workbench flow is **implemented and pending live browser validation**.
+The Applications batch workbench has been live-validated. The new Jobs database bulk intake / Process Selected to Draft flow is implemented with regression coverage and is pending live browser validation.
