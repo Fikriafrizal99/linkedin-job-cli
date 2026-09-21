@@ -7,6 +7,9 @@
 > - [Target Architecture](docs/ARCHITECTURE.md)
 > - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 > - [Backlog](BACKLOG.md)
+> - [Application Workbench](docs/APPLICATION_WORKBENCH.md)
+> - [Gmail Setup](docs/GMAIL_SETUP.md)
+> - [UI Reference](docs/UI_REFERENCE.md)
 >
 > Scope rule: **collect accurately first; execute applications separately.** HR-contact research is retained as optional enrichment. Application execution, Gmail drafts, CV selection, and multi-source collectors belong to later/separate work.
 
