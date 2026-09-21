@@ -110,3 +110,55 @@ func TestSaveApplicationPreparation(t *testing.T) {
 		t.Fatalf("prepared data not persisted: %+v", got)
 	}
 }
+
+
+func TestMarkApplicationDraftCreated(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-draft")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil {
+		t.Fatalf("SaveApplicationPreparation: %v", err)
+	}
+
+	got, err := st.MarkApplicationDraftCreated(j.ID, "draft-123")
+	if err != nil {
+		t.Fatalf("MarkApplicationDraftCreated: %v", err)
+	}
+	if got.State != models.ApplicationStateDraftCreated || got.GmailDraftID != "draft-123" || got.DraftCreatedAt == "" {
+		t.Fatalf("draft transition failed: %+v", got)
+	}
+
+	again, err := st.MarkApplicationDraftCreated(j.ID, "draft-123")
+	if err != nil {
+		t.Fatalf("idempotent MarkApplicationDraftCreated: %v", err)
+	}
+	if again.GmailDraftID != "draft-123" {
+		t.Fatalf("draft id changed: %+v", again)
+	}
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "other-draft"); err == nil {
+		t.Fatal("expected conflicting draft id error")
+	}
+}
+
+func TestMarkApplicationDraftCreatedRequiresPreparedReadyEmail(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-draft-unprepared")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "draft-1"); err == nil {
+		t.Fatal("expected unprepared error")
+	}
+}
