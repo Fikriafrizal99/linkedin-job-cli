@@ -206,3 +206,63 @@ func TestApplicationDetailBlocksGmailDraftWhenCVFileMissing(t *testing.T) {
 		t.Fatal("missing CV must block Gmail draft creation")
 	}
 }
+
+func TestApplicationDetailRendersDraftRecreationRecovery(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	render := func(state string) string {
+		var b strings.Builder
+		err := tpl.Execute(&b, appPageData{
+			Title:             "Application Detail",
+			Active:            "applications",
+			CSRF:              "csrf",
+			CandidateName:     "Candidate",
+			CandidateInitials: "C",
+			GmailConnected:    true,
+			SelectedCVReady:   true,
+			SelectedCVPath:    "/tmp/CV.pdf",
+			Attachments: []appAttachment{{
+				ID: "portfolio-1", Label: "Portfolio", Kind: "portfolio", Exists: true,
+			}},
+			SelectedApplication: &models.JobApplication{
+				JobID: "50012", State: state, Recipient: "jobs@example.com",
+				Subject: "Application", Body: "Body", CVProfile: "general",
+				GmailDraftID: "deleted-draft",
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b.String()
+	}
+
+	draft := render(models.ApplicationStateDraftCreated)
+	for _, want := range []string{
+		"action=\"/app/applications/50012/recreate-draft\"",
+		"name=\"recreate_confirm\" value=\"1\" required",
+		"Recreate Gmail Draft",
+		"name=\"attachment\" value=\"portfolio-1\" checked",
+	} {
+		if !strings.Contains(draft, want) {
+			t.Errorf("DRAFT_CREATED recovery UI missing %q", want)
+		}
+	}
+
+	approved := render(models.ApplicationStateApproved)
+	for _, want := range []string{
+		"Approved draft missing or deleted? Recreate it",
+		"Recreate Gmail Draft &amp; Reset Approval",
+		"APPROVED → DRAFT_CREATED",
+	} {
+		if !strings.Contains(approved, want) {
+			t.Errorf("APPROVED recovery UI missing %q", want)
+		}
+	}
+
+	sent := render(models.ApplicationStateSent)
+	if strings.Contains(sent, "/recreate-draft") {
+		t.Fatal("SENT application must not expose draft recreation")
+	}
+}
