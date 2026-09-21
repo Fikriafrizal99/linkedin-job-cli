@@ -1162,6 +1162,24 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
       {{end}}
     {{else if .SelectedApplication}}
       <div class="content-card"><div class="content-pad"><div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Application{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
+        {{if or (eq .SelectedApplication.State "READY_EASY_APPLY") (eq .SelectedApplication.State "IN_PROGRESS") (eq .SelectedApplication.State "APPLIED")}}
+          <div class="tabs"><span class="tab active">LinkedIn</span><span class="tab">CV</span><span class="tab">Timeline</span></div>
+          <div class="detail-grid">
+            <div class="info-card"><h3>Easy Apply</h3><div class="info-row"><span>Method</span><b>EASY APPLY</b></div><div class="info-row"><span>Opened at</span><b>{{if .SelectedApplication.OpenedAt}}{{.SelectedApplication.OpenedAt}}{{else}}—{{end}}</b></div><div class="info-row"><span>Applied at</span><b>{{if .SelectedApplication.AppliedAt}}{{.SelectedApplication.AppliedAt}}{{else}}—{{end}}</b></div></div>
+            <div class="info-card"><h3>Tracking</h3><div class="info-row"><span>CV profile</span><b>{{if .SelectedApplication.CVProfile}}{{.SelectedApplication.CVProfile}}{{else}}Not recorded yet{{end}}</b></div><div class="info-row"><span>Submission</span><b>{{if eq .SelectedApplication.State "APPLIED"}}Confirmed manually{{else}}Not confirmed{{end}}</b></div></div>
+          </div>
+          <div class="field-label">LinkedIn Apply URL</div><div class="field">{{.SelectedApplication.ApplyURL}}</div>
+          {{if eq .SelectedApplication.State "APPLIED"}}
+            <div class="alert success" style="margin-top:16px">This Easy Apply application is recorded as APPLIED after manual LinkedIn submission.</div>
+          {{else}}
+            <div class="detail-actions"><a class="btn primary" href="/app/applications/easy-apply?ids={{.SelectedApplication.JobID}}&pos=0">Open in Easy Apply Queue</a></div>
+            <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/remove" style="margin-top:12px" onsubmit="return confirm('Remove this Easy Apply application from the queue? The collected job will remain in Jobs.')">
+              <input type="hidden" name="csrf" value="{{.CSRF}}">
+              <button class="btn ghost" type="submit">Remove from Queue</button>
+            </form>
+            <div class="footer-note">Removing the queue record does not change or delete the collected Job and does not interact with LinkedIn.</div>
+          {{end}}
+        {{else}}
         <div class="tabs"><span class="tab active">Email</span><span class="tab">CV &amp; Files</span><span class="tab">Timeline</span><span class="tab">Notes</span></div>
         <div class="form-grid"><div><div class="field-label">To</div><div class="field">{{.SelectedApplication.Recipient}}</div></div><div><div class="field-label">CV Profile</div><div class="field">{{.SelectedApplication.CVProfile}}</div></div></div>
         <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
@@ -1263,6 +1281,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         {{else}}
           <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button></div>
           <div class="footer-note">This lifecycle state is protected from re-preparation.</div>
+        {{end}}
         {{end}}
       </div></div>
     {{else}}
