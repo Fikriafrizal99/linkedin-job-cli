@@ -51,7 +51,7 @@ func TestProcessJobsToDraftQueuesPreparesAndBuildsReviewQueue(t *testing.T) {
 	}
 
 	got := processJobsToDraft(context.Background(), st, settings, nil, []string{emailJob.ID, reviewJob.ID}, creator)
-	if got.Selected != 2 || got.Queued != 2 || got.Prepared != 1 || got.DraftCreated != 1 || got.NeedReview != 1 || got.Failed != 0 {
+	if got.Selected != 2 || got.Queued != 1 || got.Prepared != 1 || got.DraftCreated != 1 || got.NonEmailSkipped != 1 || got.NeedReview != 0 || got.Failed != 0 {
 		t.Fatalf("unexpected result: %+v", got)
 	}
 	if len(got.ReviewIDs) != 1 || got.ReviewIDs[0] != emailJob.ID {
@@ -68,8 +68,8 @@ func TestProcessJobsToDraftQueuesPreparesAndBuildsReviewQueue(t *testing.T) {
 	}
 	reviewApp, err := st.GetApplicationByJobID(reviewJob.ID)
 	if err != nil { t.Fatal(err) }
-	if reviewApp == nil || reviewApp.State != models.ApplicationStateNeedReview || reviewApp.Recipient != "" {
-		t.Fatalf("review application=%+v", reviewApp)
+	if reviewApp != nil {
+		t.Fatalf("non-email job should remain outside application queue, got %+v", reviewApp)
 	}
 
 	again := processJobsToDraft(context.Background(), st, settings, nil, []string{emailJob.ID}, creator)
@@ -133,8 +133,8 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 		"name=\"filter_q\" value=\"sales\"",
 		"name=\"filter_location\" value=\"Jakarta\"",
 		"name=\"attachment\" value=\"portfolio-1\" checked",
-		"No explicit email · will need review",
-		"Queue → deterministic Prepare → Gmail Draft",
+		"No explicit email · skipped by default",
+		"Include jobs without email as NEED_REVIEW",
 	} {
 		if !strings.Contains(html, want) { t.Errorf("Jobs bulk UI missing %q", want) }
 	}
@@ -151,5 +151,51 @@ func TestJobsProcessButtonDisabledWithoutGmail(t *testing.T) {
 	html := b.String()
 	if !strings.Contains(html, `formaction="/app/jobs/bulk/process-to-draft" disabled title="Connect Gmail first"`) {
 		t.Fatal("Process Selected to Draft should be disabled when Gmail is disconnected")
+	}
+}
+
+
+func TestBulkQueueJobsSkipsNonEmailUnlessExplicitlyIncluded(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "jobs-queue-nonemail.db"))
+	if err != nil { t.Fatal(err) }
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "job-review", Title: "Account Executive", Company: "Example",
+		URL: "https://www.linkedin.com/jobs/view/job-review",
+		ApplicationMethod: "UNKNOWN",
+	}
+	if err := st.Upsert(job); err != nil { t.Fatal(err) }
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	post := func(include bool) string {
+		form := url.Values{"csrf": {"csrf-test"}, "job_id": {job.ID}}
+		if include { form.Set("include_need_review", "1") }
+		req := httptest.NewRequest(http.MethodPost, "/app/jobs/bulk/queue", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		ws.handleAppBulkQueueJobs(rec, req)
+		if rec.Code != http.StatusSeeOther { t.Fatalf("status=%d", rec.Code) }
+		return rec.Header().Get("Location")
+	}
+
+	loc := post(false)
+	if !strings.Contains(loc, "non_email_skipped_count=1") || !strings.Contains(loc, "queued_count=0") {
+		t.Fatalf("default non-email redirect=%q", loc)
+	}
+	app, err := st.GetApplicationByJobID(job.ID)
+	if err != nil { t.Fatal(err) }
+	if app != nil {
+		t.Fatalf("non-email job should not be queued by default: %+v", app)
+	}
+
+	loc = post(true)
+	if !strings.Contains(loc, "queued_count=1") || !strings.Contains(loc, "need_review_count=1") {
+		t.Fatalf("explicit NEED_REVIEW redirect=%q", loc)
+	}
+	app, err = st.GetApplicationByJobID(job.ID)
+	if err != nil { t.Fatal(err) }
+	if app == nil || app.State != models.ApplicationStateNeedReview {
+		t.Fatalf("expected explicit NEED_REVIEW queue, got %+v", app)
 	}
 }
