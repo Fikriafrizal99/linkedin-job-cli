@@ -529,9 +529,12 @@ applications
   +-- READY_EMAIL
   +-- NEED_REVIEW
   +-- DRAFT_CREATED
+  +-- APPROVED
   +-- SENT
 ```
 
 The collector remains the source of job metadata such as `apply_email` and `application_method`. The Application Engine owns CV-profile selection, prepared email content, Gmail draft identifiers, and later send/follow-up state.
 
 CV selection is deterministic and configuration-driven. Profiles live under `application.cv_profiles` in `settings.yaml`; title keyword matches receive higher weight than description matches, with `default_cv_profile` as fallback. Preparing an application does not advance it past `READY_EMAIL` and never sends email.
+
+Manual review is an explicit state transition: only a persisted Gmail draft may advance from `DRAFT_CREATED` to `APPROVED`. Approval stores a review timestamp and optional note. The future send stage must require `APPROVED`; creating a draft alone is never sufficient authorization to send.
