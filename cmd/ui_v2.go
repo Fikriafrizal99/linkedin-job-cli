@@ -425,15 +425,16 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		drafts, _ := strconv.Atoi(r.URL.Query().Get("draft_count"))
 		existingDrafts, _ := strconv.Atoi(r.URL.Query().Get("existing_draft_count"))
 		needReview, _ := strconv.Atoi(r.URL.Query().Get("need_review_count"))
+		nonEmailSkipped, _ := strconv.Atoi(r.URL.Query().Get("non_email_skipped_count"))
 		skipped, _ := strconv.Atoi(r.URL.Query().Get("skipped_count"))
 		failed, _ := strconv.Atoi(r.URL.Query().Get("failed_count"))
 		switch {
 		case r.URL.Query().Get("job_process") == "1":
-			pd.ActionMessage = fmt.Sprintf("Process to Draft finished: %d selected · %d queued · %d prepared · %d new drafts · %d existing drafts in review · %d need review · %d skipped · %d failed.", selected, queued, prepared, drafts, existingDrafts, needReview, skipped, failed)
+			pd.ActionMessage = fmt.Sprintf("Process to Draft finished: %d selected · %d queued · %d prepared · %d new drafts · %d existing drafts in review · %d non-email skipped · %d existing need review · %d skipped · %d failed.", selected, queued, prepared, drafts, existingDrafts, nonEmailSkipped, needReview, skipped, failed)
 		case action == "queue":
-			pd.ActionMessage = fmt.Sprintf("Bulk queue finished: %d selected · %d queued · %d need review · %d skipped · %d failed.", selected, queued, needReview, skipped, failed)
+			pd.ActionMessage = fmt.Sprintf("Bulk queue finished: %d selected · %d queued · %d non-email skipped · %d need review · %d existing/skipped · %d failed.", selected, queued, nonEmailSkipped, needReview, skipped, failed)
 		case action == "process":
-			pd.ActionMessage = fmt.Sprintf("Process to Draft finished: %d selected · %d queued · %d prepared · %d drafts · %d need review · %d skipped · %d failed.", selected, queued, prepared, drafts, needReview, skipped, failed)
+			pd.ActionMessage = fmt.Sprintf("Process to Draft finished: %d selected · %d queued · %d prepared · %d drafts · %d non-email skipped · %d existing need review · %d skipped · %d failed.", selected, queued, prepared, drafts, nonEmailSkipped, needReview, skipped, failed)
 		}
 	}
 	if processErr := strings.TrimSpace(r.URL.Query().Get("job_process_error")); processErr != "" {
@@ -444,6 +445,9 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		pd.ActionMessage = "Application approved after manual Gmail draft review. No email was sent."
 	case "unapproved":
 		pd.ActionMessage = "Approval removed. The Gmail draft is back in manual review and no email was sent."
+	}
+	if r.URL.Query().Get("removed") == "1" {
+		pd.ActionMessage = "Application removed from queue. The collected job remains in the Jobs database."
 	}
 	if action := strings.TrimSpace(r.URL.Query().Get("bulk")); action != "" {
 		ok, _ := strconv.Atoi(r.URL.Query().Get("ok"))
@@ -458,6 +462,8 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.ActionMessage = fmt.Sprintf("Review selection: %d eligible, %d skipped, %d failed.", ok, skipped, failed)
 		case "send":
 			pd.ActionMessage = fmt.Sprintf("Explicit send finished: %d sent, %d skipped, %d failed.", ok, skipped, failed)
+		case "remove":
+			pd.ActionMessage = fmt.Sprintf("Remove from queue finished: %d removed, %d protected/skipped, %d failed. Collected jobs were not deleted.", ok, skipped, failed)
 		}
 	}
 	if bulkErr := strings.TrimSpace(r.URL.Query().Get("bulk_error")); bulkErr != "" {
@@ -924,7 +930,9 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
               <button class="btn primary" id="process-selected-jobs" data-gmail="{{if .GmailConnected}}1{{else}}0{{end}}" type="submit" formaction="/app/jobs/bulk/process-to-draft" {{if not .GmailConnected}}disabled title="Connect Gmail first"{{end}}>Process Selected to Draft</button>
             </div>
           </div>
-          <div class="bulk-hint">Queue Selected supports up to 50 jobs. Process Selected to Draft supports up to 25 and runs Queue → deterministic Prepare → Gmail Draft, then opens the resulting DRAFT_CREATED records in Review Queue. It never approves or sends email. Jobs without an explicit application email stop at NEED_REVIEW.</div>
+          <div class="bulk-hint">By default, jobs without an explicit application email are skipped and stay only in the Jobs database. Process Selected to Draft always skips them.</div>
+          <label class="checkline" style="margin:0"><input type="checkbox" name="include_need_review" value="1"> Include jobs without email as NEED_REVIEW when using Queue Selected</label>
+          <div class="bulk-hint">Queue Selected supports up to 50 jobs. Process Selected to Draft supports up to 25 and runs Queue → deterministic Prepare → Gmail Draft → Review Queue. Neither action approves or sends email.</div>
           {{if not .GmailConnected}}<div class="bulk-hint">Gmail is not connected, so Process Selected to Draft is disabled. Queue Selected remains available.</div>{{end}}
           {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for created drafts:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
         </div>
@@ -998,6 +1006,10 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
         <div class="detail-grid" style="margin-top:14px"><div class="info-card"><h3>Provider</h3><div class="info-row"><span>Draft ID</span><b>{{.SelectedApplication.GmailDraftID}}</b></div><div class="info-row"><span>Message ID</span><b>{{.SelectedApplication.GmailMessageID}}</b></div><div class="info-row"><span>Thread ID</span><b>{{.SelectedApplication.GmailThreadID}}</b></div></div><div class="info-card"><h3>Review</h3><div class="info-row"><span>Reviewed</span><b>{{.SelectedApplication.ReviewedAt}}</b></div><div class="info-row"><span>Note</span><b>{{.SelectedApplication.ReviewNote}}</b></div><div class="info-row"><span>Sent</span><b>{{.SelectedApplication.SentAt}}</b></div></div></div>
         {{if eq .SelectedApplication.State "READY_EMAIL"}}
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/remove" style="margin-top:12px" onsubmit="return confirm('Remove this application from the queue? The collected job will remain in Jobs.')">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <button class="btn ghost" type="submit">Remove from Queue</button>
+          </form>
           <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/prepare" style="margin-top:16px">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <div class="form-grid">
@@ -1032,6 +1044,10 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
           {{end}}
         {{else if eq .SelectedApplication.State "NEED_REVIEW"}}
           <div class="alert" style="margin-top:16px">Recipient/email is not confirmed. Resolve the application contact before preparing this record.</div>
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/remove" style="margin-top:12px" onsubmit="return confirm('Remove this NEED_REVIEW application from the queue? The collected job will remain in Jobs.')">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <button class="btn ghost" type="submit">Remove from Queue</button>
+          </form>
         {{else if eq .SelectedApplication.State "DRAFT_CREATED"}}
           <div class="alert success" style="margin-top:16px">Gmail draft is created and ready for manual review.</div>
           <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a></div>
@@ -1099,6 +1115,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
               <button class="btn ghost" type="submit" formaction="/app/applications/bulk/prepare">Prepare Selected</button>
               <button class="btn ghost" type="submit" formaction="/app/applications/bulk/draft">Create Drafts</button>
               <button class="btn ghost" type="submit" formaction="/app/applications/bulk/review">Review Selected</button>
+              <button class="btn ghost" type="submit" formaction="/app/applications/bulk/remove" onclick="return confirm('Remove eligible selected applications from the queue? READY_EMAIL/NEED_REVIEW only; collected Jobs stay in the database.')">Remove Selected</button>
               <a class="btn ghost" href="/app/applications/review">Review Draft Queue ({{.Stats.DraftTotal}})</a>
               <button class="btn primary" type="submit" formaction="/app/applications/send-confirm">Confirm Send</button>
             </div>
