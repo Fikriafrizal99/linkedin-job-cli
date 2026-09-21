@@ -86,7 +86,7 @@ func TestAppTemplateApplicationDetailIsReadOnlyUntilActionWiring(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"APPROVED", "draft-123", "Send (separate phase)", "Unapprove &amp; Reopen Review", "disabled"} {
+	for _, want := range []string{"APPROVED", "draft-123", "Review &amp; Send Application", "action=\"/app/applications/send-confirm\"", "Unapprove &amp; Reopen Review"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("application detail missing %q", want)
 		}
