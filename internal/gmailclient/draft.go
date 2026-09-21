@@ -131,7 +131,7 @@ func BuildMIME(payload appengine.DraftPayload) ([]byte, error) {
 		return nil, err
 	}
 
-	for _, path := range payload.AttachmentFiles {
+	for i, path := range payload.AttachmentFiles {
 		path = strings.TrimSpace(path)
 		if path == "" {
 			return nil, fmt.Errorf("attachment path is empty")
@@ -141,7 +141,21 @@ func BuildMIME(payload appengine.DraftPayload) ([]byte, error) {
 			return nil, fmt.Errorf("read attachment %q: %w", path, err)
 		}
 		filename := filepath.Base(path)
+		if i < len(payload.AttachmentNames) {
+			if override := strings.TrimSpace(payload.AttachmentNames[i]); override != "" {
+				if strings.ContainsAny(override, "\r\n") {
+					return nil, fmt.Errorf("attachment filename contains invalid newline characters")
+				}
+				filename = filepath.Base(override)
+			}
+		}
+		if filename == "." || filename == "" {
+			return nil, fmt.Errorf("attachment filename is empty")
+		}
 		contentType := mime.TypeByExtension(filepath.Ext(filename))
+		if contentType == "" {
+			contentType = mime.TypeByExtension(filepath.Ext(path))
+		}
 		if contentType == "" {
 			contentType = "application/octet-stream"
 		}
