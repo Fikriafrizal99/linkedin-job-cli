@@ -518,10 +518,15 @@ func resolveAttachments(configured []config.AttachmentSettings, ids []string, ca
 		if total > 18<<20 {
 			return nil, fmt.Errorf("selected additional attachments exceed 18 MiB")
 		}
+		kind := strings.ToLower(strings.TrimSpace(a.Kind))
+		displayLabel := strings.TrimSpace(a.Label)
+		if kind == "portfolio" {
+			displayLabel = "Portfolio"
+		}
 		out = append(out, resolvedAttachment{
 			Path:  path,
-			Name:  friendlyAttachmentName(candidateName, a.Label, path),
-			Kind:  strings.ToLower(strings.TrimSpace(a.Kind)),
+			Name:  friendlyAttachmentName(candidateName, displayLabel, path),
+			Kind:  kind,
 			Label: strings.TrimSpace(a.Label),
 		})
 	}
@@ -617,7 +622,12 @@ func attachmentView(a config.AttachmentSettings) appAttachment {
 		Label: strings.TrimSpace(a.Label),
 		Kind: strings.TrimSpace(a.Kind),
 		Path: path,
-		FileName: friendlyAttachmentName("", a.Label, path),
+		FileName: friendlyAttachmentName("", func() string {
+			if strings.EqualFold(strings.TrimSpace(a.Kind), "portfolio") {
+				return "Portfolio"
+			}
+			return a.Label
+		}(), path),
 	}
 	if info, err := os.Stat(path); err == nil && !info.IsDir() {
 		view.Exists = true
