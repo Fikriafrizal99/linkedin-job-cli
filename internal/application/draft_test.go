@@ -61,3 +61,41 @@ func TestBuildDraftPayloadRejectsExistingDraft(t *testing.T) {
 		t.Fatal("expected existing draft error")
 	}
 }
+
+
+func TestBuildRecreateDraftPayloadAllowsDraftAndApproved(t *testing.T) {
+	cv := filepath.Join(t.TempDir(), "cv.pdf")
+	if err := os.WriteFile(cv, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings := config.ApplicationSettings{
+		CVProfiles: []config.CVProfileSettings{{ID: "general", Path: cv}},
+	}
+	for _, state := range []string{models.ApplicationStateDraftCreated, models.ApplicationStateApproved} {
+		t.Run(state, func(t *testing.T) {
+			app := &models.JobApplication{
+				JobID: "123", State: state, Recipient: "jobs@example.com",
+				Subject: "Application", Body: "Body", CVProfile: "general",
+				GmailDraftID: "deleted-draft",
+			}
+			got, err := BuildRecreateDraftPayload(app, settings)
+			if err != nil {
+				t.Fatalf("BuildRecreateDraftPayload: %v", err)
+			}
+			if got.To != "jobs@example.com" || len(got.AttachmentFiles) != 1 {
+				t.Fatalf("payload=%+v", got)
+			}
+		})
+	}
+}
+
+func TestBuildRecreateDraftPayloadRejectsSent(t *testing.T) {
+	app := &models.JobApplication{
+		JobID: "123", State: models.ApplicationStateSent,
+		Recipient: "jobs@example.com", Subject: "Application",
+		Body: "Body", CVProfile: "general", GmailDraftID: "draft-1",
+	}
+	if _, err := BuildRecreateDraftPayload(app, config.ApplicationSettings{}); err == nil {
+		t.Fatal("expected SENT recreation to be rejected")
+	}
+}
