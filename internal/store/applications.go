@@ -20,12 +20,15 @@ CREATE TABLE IF NOT EXISTS applications (
     gmail_draft_id TEXT,
     gmail_message_id TEXT,
     gmail_thread_id TEXT,
+    apply_url TEXT,
     last_error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     draft_created_at TEXT,
     reviewed_at TEXT,
     review_note TEXT,
+    opened_at TEXT,
+    applied_at TEXT,
     sent_at TEXT,
     FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
 );
@@ -67,6 +70,9 @@ func migrateApplications(db *sql.DB) error {
 		{"review_note", "TEXT"},
 		{"gmail_message_id", "TEXT"},
 		{"gmail_thread_id", "TEXT"},
+		{"apply_url", "TEXT"},
+		{"opened_at", "TEXT"},
+		{"applied_at", "TEXT"},
 	} {
 		if existing[c.name] {
 			continue
@@ -95,27 +101,40 @@ func (s *Store) QueueApplication(jobID string) (*models.JobApplication, error) {
 
 	state := models.ApplicationStateNeedReview
 	recipient := ""
-	if strings.EqualFold(strings.TrimSpace(j.ApplicationMethod), "EMAIL") && strings.TrimSpace(j.ApplyEmail) != "" {
+	applyURL := ""
+	method := strings.ToUpper(strings.TrimSpace(j.ApplicationMethod))
+	switch {
+	case method == "EMAIL" && strings.TrimSpace(j.ApplyEmail) != "":
 		state = models.ApplicationStateReadyEmail
 		recipient = strings.TrimSpace(j.ApplyEmail)
+	case method == "LINKEDIN" || method == "EASY_APPLY":
+		state = models.ApplicationStateReadyEasyApply
+		applyURL = strings.TrimSpace(j.ApplyURL)
+		if applyURL == "" {
+			applyURL = strings.TrimSpace(j.URL)
+		}
 	}
 
 	now := NowISO()
 	_, err = s.db.Exec(`
 INSERT INTO applications
-  (job_id,state,recipient,created_at,updated_at)
-VALUES (?,?,?,?,?)
+  (job_id,state,recipient,apply_url,created_at,updated_at)
+VALUES (?,?,?,?,?,?)
 ON CONFLICT(job_id) DO UPDATE SET
   state=CASE
-    WHEN applications.state IN ('DRAFT_CREATED','APPROVED','SENT') THEN applications.state
+    WHEN applications.state IN ('DRAFT_CREATED','APPROVED','SENT','IN_PROGRESS','APPLIED') THEN applications.state
     ELSE excluded.state
   END,
   recipient=CASE
-    WHEN applications.state IN ('DRAFT_CREATED','APPROVED','SENT') THEN applications.recipient
+    WHEN applications.state IN ('DRAFT_CREATED','APPROVED','SENT','IN_PROGRESS','APPLIED') THEN applications.recipient
     ELSE excluded.recipient
   END,
+  apply_url=CASE
+    WHEN applications.state IN ('IN_PROGRESS','APPLIED') AND applications.apply_url <> '' THEN applications.apply_url
+    ELSE excluded.apply_url
+  END,
   updated_at=excluded.updated_at
-`, jobID, state, recipient, now, now)
+`, jobID, state, recipient, applyURL, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +157,11 @@ func (s *Store) RemoveApplication(jobID string) error {
 		return fmt.Errorf("job %s is not queued for application", jobID)
 	}
 	switch existing.State {
-	case models.ApplicationStateReadyEmail, models.ApplicationStateNeedReview:
-		// Safe pre-provider states.
+	case models.ApplicationStateReadyEmail, models.ApplicationStateNeedReview,
+		models.ApplicationStateReadyEasyApply, models.ApplicationStateInProgress:
+		// Safe pre-provider / pre-submission states.
 	default:
-		return fmt.Errorf("application state is %s; only READY_EMAIL or NEED_REVIEW can be removed from queue", existing.State)
+		return fmt.Errorf("application state is %s; only pre-draft/pre-submission states can be removed from queue", existing.State)
 	}
 	if strings.TrimSpace(existing.GmailDraftID) != "" {
 		return fmt.Errorf("application already references Gmail draft %s", existing.GmailDraftID)
@@ -154,6 +174,72 @@ func (s *Store) RemoveApplication(jobID string) error {
 		return fmt.Errorf("application for job %s was not removed", jobID)
 	}
 	return nil
+}
+
+// MarkEasyApplyOpened records an explicit user action that opened the LinkedIn
+// application page. It never submits an application.
+func (s *Store) MarkEasyApplyOpened(jobID string) (*models.JobApplication, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, fmt.Errorf("empty job id")
+	}
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State == models.ApplicationStateInProgress {
+		return existing, nil
+	}
+	if existing.State != models.ApplicationStateReadyEasyApply {
+		return nil, fmt.Errorf("application state is %s; expected READY_EASY_APPLY", existing.State)
+	}
+	if strings.TrimSpace(existing.ApplyURL) == "" {
+		return nil, fmt.Errorf("Easy Apply application has no LinkedIn apply URL")
+	}
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications
+SET state=?, opened_at=CASE WHEN COALESCE(opened_at,'')='' THEN ? ELSE opened_at END,
+    updated_at=?, last_error=''
+WHERE job_id=?
+`, models.ApplicationStateInProgress, now, now, jobID); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(jobID)
+}
+
+// MarkEasyApplyApplied records the user's explicit confirmation that the
+// application was submitted manually on LinkedIn.
+func (s *Store) MarkEasyApplyApplied(jobID, cvProfile string) (*models.JobApplication, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, fmt.Errorf("empty job id")
+	}
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State == models.ApplicationStateApplied {
+		return existing, nil
+	}
+	if existing.State != models.ApplicationStateInProgress {
+		return nil, fmt.Errorf("application state is %s; open the LinkedIn application first", existing.State)
+	}
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications
+SET state=?, cv_profile=?, applied_at=?, updated_at=?, last_error=''
+WHERE job_id=?
+`, models.ApplicationStateApplied, strings.TrimSpace(cvProfile), now, now, jobID); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(jobID)
 }
 
 // SaveApplicationPreparation stores deterministic draft content while keeping
@@ -425,9 +511,10 @@ func (s *Store) GetApplicationByJobID(jobID string) (*models.JobApplication, err
 SELECT id,job_id,state,COALESCE(recipient,''),COALESCE(subject,''),
        COALESCE(body,''),COALESCE(cv_profile,''),COALESCE(gmail_draft_id,''),
        COALESCE(gmail_message_id,''),COALESCE(gmail_thread_id,''),
-       COALESCE(last_error,''),created_at,updated_at,
+       COALESCE(apply_url,''),COALESCE(last_error,''),created_at,updated_at,
        COALESCE(draft_created_at,''),COALESCE(reviewed_at,''),
-       COALESCE(review_note,''),COALESCE(sent_at,'')
+       COALESCE(review_note,''),COALESCE(opened_at,''),COALESCE(applied_at,''),
+       COALESCE(sent_at,'')
 FROM applications WHERE job_id=? LIMIT 1
 `, jobID)
 	return scanApplication(row)
@@ -438,9 +525,10 @@ func (s *Store) ListApplications(state string, limit int) ([]models.JobApplicati
 SELECT id,job_id,state,COALESCE(recipient,''),COALESCE(subject,''),
        COALESCE(body,''),COALESCE(cv_profile,''),COALESCE(gmail_draft_id,''),
        COALESCE(gmail_message_id,''),COALESCE(gmail_thread_id,''),
-       COALESCE(last_error,''),created_at,updated_at,
+       COALESCE(apply_url,''),COALESCE(last_error,''),created_at,updated_at,
        COALESCE(draft_created_at,''),COALESCE(reviewed_at,''),
-       COALESCE(review_note,''),COALESCE(sent_at,'')
+       COALESCE(review_note,''),COALESCE(opened_at,''),COALESCE(applied_at,''),
+       COALESCE(sent_at,'')
 FROM applications WHERE 1=1
 `
 	var args []interface{}
@@ -477,9 +565,9 @@ func scanApplication(row scanner) (*models.JobApplication, error) {
 	if err := row.Scan(
 		&a.ID, &a.JobID, &a.State, &a.Recipient, &a.Subject,
 		&a.Body, &a.CVProfile, &a.GmailDraftID, &a.GmailMessageID,
-		&a.GmailThreadID, &a.LastError, &a.CreatedAt, &a.UpdatedAt,
+		&a.GmailThreadID, &a.ApplyURL, &a.LastError, &a.CreatedAt, &a.UpdatedAt,
 		&a.DraftCreatedAt, &a.ReviewedAt,
-		&a.ReviewNote, &a.SentAt,
+		&a.ReviewNote, &a.OpenedAt, &a.AppliedAt, &a.SentAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
