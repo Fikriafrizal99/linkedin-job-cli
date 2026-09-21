@@ -7,9 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"linkedin-jobs/internal/linkedin"
 	"linkedin-jobs/internal/render"
-	"linkedin-jobs/internal/store"
 )
 
 var (
@@ -44,16 +42,6 @@ Examples:
 		}
 
 		keywords := strings.TrimSpace(strings.Join(args, " "))
-		postedWithin, err := resolvePostedWithin(collectPostedWithin)
-		if err != nil {
-			return err
-		}
-
-		c, err := newClient(collectWithSession)
-		if err != nil {
-			return err
-		}
-
 		fmt.Fprintf(os.Stderr, "Collecting LinkedIn Jobs: %q", keywords)
 		if collectLocation != "" {
 			fmt.Fprintf(os.Stderr, " @ %q", collectLocation)
@@ -66,94 +54,55 @@ Examples:
 		}
 		fmt.Fprintln(os.Stderr, "…")
 
-		jobs, err := c.Search(linkedin.SearchParams{
-			Keywords:     keywords,
-			Location:     collectLocation,
-			WorkType:     resolveWorkType(collectRemote, collectHybrid, collectOnsite),
-			PostedWithin: postedWithin,
-			MaxJobs:      collectTop,
-		})
-		if err != nil {
-			return fmt.Errorf("collect search failed: %w", err)
-		}
-
-		for _, j := range jobs {
-			j.Source = "linkedin"
-		}
-
-		target := jobs
-		if !collectForceOW {
-			target = filterNewIDs(jobs)
-		}
-		if len(target) == 0 {
-			fmt.Fprintln(os.Stderr, "No new jobs to collect.")
-			return nil
-		}
-
-		fmt.Fprintf(os.Stderr, "Fetching details for %d new job(s)…\n", len(target))
-		c.FetchDetailsBatch(target, resolveDetailDelay(), func(done, total int) {
-			fmt.Fprintf(os.Stderr, "\r  %d/%d", done, total)
-		})
-		fmt.Fprintln(os.Stderr)
-
 		st, err := openStore()
 		if err != nil {
 			return fmt.Errorf("failed to open DB: %w", err)
 		}
 		defer st.Close()
 
-		persisted := 0
-		exactDuplicates := 0
-		likelyReposts := 0
-		for _, j := range target {
-			j.ContentHash = store.ContentHash(j.Company, j.Title, j.Description, j.ListedAt)
-			j.StructuralHash = store.StructuralHash(j.Company, j.Title, j.Description)
-
-			classification, duplicateOf, err := st.ClassifyStructuralDuplicate(j)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "  ! classify %s: %v\n", j.Title, err)
-				classification = store.DuplicateNew
+		result, err := runCollect(collectRequest{
+			Keywords:       keywords,
+			Location:       collectLocation,
+			PostedWithin:   collectPostedWithin,
+			Top:            collectTop,
+			Remote:         collectRemote,
+			Hybrid:         collectHybrid,
+			Onsite:         collectOnsite,
+			ForceOverwrite: collectForceOW,
+			WithSession:    collectWithSession,
+		}, st, func(stage string, done, total int) {
+			if stage != "details" {
+				return
 			}
-			// --force-overwrite may intentionally revisit the same ID. Preserve
-			// its prior structural classification rather than calling itself a
-			// duplicate of itself.
-			if classification == store.DuplicateSameJobID {
-				if existing, getErr := st.Get(j.ID); getErr == nil && existing != nil {
-					classification = existing.DuplicateClassification
-					duplicateOf = existing.DuplicateOfJobID
-				}
-				if classification == "" {
-					classification = store.DuplicateNew
-				}
+			if done == 0 {
+				fmt.Fprintf(os.Stderr, "Fetching details for %d new job(s)…\n", total)
+				return
 			}
-			j.DuplicateClassification = classification
-			j.DuplicateOfJobID = duplicateOf
-
-			switch classification {
-			case store.DuplicateExact:
-				exactDuplicates++
-			case store.DuplicateLikelyRepost:
-				likelyReposts++
+			fmt.Fprintf(os.Stderr, "\r  %d/%d", done, total)
+			if done == total {
+				fmt.Fprintln(os.Stderr)
 			}
-
-			if err := st.Upsert(j); err != nil {
-				fmt.Fprintf(os.Stderr, "  ! %s: %v\n", j.Title, err)
-				continue
-			}
-			persisted++
+		})
+		if err != nil {
+			return err
 		}
-		fmt.Fprintf(os.Stderr, "Collected %d job(s) into SQLite", persisted)
-		if exactDuplicates > 0 || likelyReposts > 0 {
-			fmt.Fprintf(os.Stderr, " [%d exact duplicate(s), %d likely repost(s)]", exactDuplicates, likelyReposts)
+
+		if result.NewCandidates == 0 {
+			fmt.Fprintln(os.Stderr, "No new jobs to collect.")
+		} else {
+			fmt.Fprintf(os.Stderr, "Collected %d job(s) into SQLite", result.Persisted)
+			if result.ExactDuplicates > 0 || result.LikelyReposts > 0 {
+				fmt.Fprintf(os.Stderr, " [%d exact duplicate(s), %d likely repost(s)]", result.ExactDuplicates, result.LikelyReposts)
+			}
+			fmt.Fprintln(os.Stderr, ".")
 		}
-		fmt.Fprintln(os.Stderr, ".")
 
 		if jsonOut {
-			if err := render.AsJSON(os.Stdout, target); err != nil {
+			if err := render.AsJSON(os.Stdout, result.Jobs); err != nil {
 				return fmt.Errorf("json output failed: %w", err)
 			}
 		} else {
-			render.Table(os.Stdout, target)
+			render.Table(os.Stdout, result.Jobs)
 		}
 		return nil
 	},
