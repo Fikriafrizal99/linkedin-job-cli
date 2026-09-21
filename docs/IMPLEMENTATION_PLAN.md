@@ -66,7 +66,7 @@ Future project/module:
 
 ## Explicitly Deferred
 
-Do not implement these while P0/P1 are incomplete:
+These remain outside Collector V1 unless explicitly approved:
 
 - Telegram bot
 - automatic email sending
@@ -83,8 +83,7 @@ Record ideas in `BACKLOG.md` instead.
 ## Initial CLI Target
 
 ```bash
-linkedin-collector collect \
-  --keyword "Sales Executive" \
+linkedin-jobs collect "Sales Executive" \
   --location "Indonesia" \
   --posted-within 7d
 ```
@@ -92,11 +91,11 @@ linkedin-collector collect \
 Supporting commands:
 
 ```bash
-linkedin-collector list
-linkedin-collector list --has-email
-linkedin-collector list --no-email
-linkedin-collector show <job_id>
-linkedin-collector stats
+linkedin-jobs list
+linkedin-jobs list --has-email
+linkedin-jobs list --no-email
+linkedin-jobs show <job_id>
+linkedin-jobs stats
 ```
 
 ## V1 Acceptance Checklist
