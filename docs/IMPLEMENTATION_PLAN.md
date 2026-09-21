@@ -59,7 +59,7 @@ Future project/module:
 - [x] application queue with separate lifecycle persistence;
 - [x] deterministic CV selection from configured profiles;
 - [x] deterministic subject/body generation and persistence;
-- [ ] Gmail draft creation;
+- [x] Gmail draft creation through an external Gmail draft provider bridge;
 - [ ] manual review;
 - [ ] explicit send;
 - [ ] application tracking/follow-up.
@@ -108,6 +108,30 @@ linkedin-jobs applications show <job_id>
 ```
 
 Preparation persists `cv_profile`, `subject`, and `body` but keeps the application in `READY_EMAIL`; it does not create or send an email.
+
+### P3.3 — Gmail Draft Creation
+
+The CLI validates and emits a provider-ready payload, including the configured CV attachment path:
+
+```bash
+linkedin-jobs applications draft-payload <job_id>
+linkedin-jobs applications draft-payload <job_id> --json
+```
+
+An external Gmail draft provider creates the draft without sending it. Only after the provider returns a real Gmail draft id does the CLI advance lifecycle state:
+
+```bash
+linkedin-jobs applications record-draft <job_id> --draft-id <gmail_draft_id>
+```
+
+Safety rules:
+
+- source state must be `READY_EMAIL`;
+- recipient, subject, body, CV profile, and CV file must all validate;
+- an existing Gmail draft id blocks duplicate draft creation;
+- `DRAFT_CREATED` is idempotent for the same provider draft id;
+- a conflicting second draft id is rejected;
+- this flow never sends email.
 
 ## Explicitly Deferred
 
