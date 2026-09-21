@@ -38,7 +38,7 @@ var logoPNG []byte
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Serve a read-only web UI to browse all stored jobs",
+	Short: "Serve the local Job Command Center web UI",
 	Long: `Starts a local web server that lists every stored job with all fields
 visible. Long-text fields (description, summaries, company overview, fit reason,
 notes) are collapsed by default and expand on click. Each job title links out to
@@ -72,7 +72,9 @@ Read-only — no data is written. Binds to localhost only.`,
 			addr = "127.0.0.1"
 		}
 		mux := http.NewServeMux()
-		mux.HandleFunc("GET /", ws.handleIndex)
+		mux.HandleFunc("GET /", ws.handleAppRoot)
+		mux.HandleFunc("GET /app/", ws.handleAppUI)
+		mux.HandleFunc("GET /legacy", ws.handleLegacyIndex)
 		mux.HandleFunc("GET /assets/logo.png", handleLogo)
 		mux.HandleFunc("POST /jobs/{id}/status", ws.handleStatus)
 		mux.HandleFunc("POST /jobs/{id}/view", ws.handleView)
@@ -82,7 +84,8 @@ Read-only — no data is written. Binds to localhost only.`,
 			Handler:           mux,
 			ReadHeaderTimeout: 10 * time.Second,
 		}
-		fmt.Printf("Serving linkedin-jobs on http://%s/  (read-only, localhost)\n", srv.Addr)
+		fmt.Printf("Serving LinkedIn Job CLI on http://%s/\n", srv.Addr)
+		fmt.Printf("Legacy jobs view: http://%s/legacy\n", srv.Addr)
 		fmt.Println("Press Ctrl+C to stop.")
 		if err := srv.ListenAndServe(); err != nil {
 			die("server error: %v", err)
