@@ -367,7 +367,15 @@ linkedin-jobs serve --port 9000          # custom port
 
 The local browser now includes the **Job Command Center** under `/app/` with Dashboard, Jobs, Applications, CV Profiles, Collect Jobs, and Settings. The previous jobs browser remains available at `/legacy`.
 
-The **Applications** page is an application workbench with multi-select batch actions:
+The **Jobs** database and **Applications** page now work as one batch pipeline.
+
+From Jobs:
+
+- Select all visible / multi-select filtered jobs
+- Queue Selected
+- Process Selected to Draft (Queue → Prepare → Gmail Draft → Review Queue)
+
+From Applications:
 
 - Prepare Selected
 - Create Drafts
