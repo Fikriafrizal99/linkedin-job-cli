@@ -23,6 +23,8 @@ var (
 	applicationsCVProfile     string
 	applicationsDraftID       string
 	applicationsReviewNote     string
+	applicationsMessageID      string
+	applicationsThreadID       string
 )
 
 var applicationsCmd = &cobra.Command{
@@ -387,6 +389,68 @@ var applicationsUnapproveCmd = &cobra.Command{
 	},
 }
 
+var applicationsSendRequestCmd = &cobra.Command{
+	Use:   "send-request <job_id>",
+	Short: "Validate an approved application and emit the Gmail draft id for explicit sending",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		st, err := openStore()
+		if err != nil {
+			return fmt.Errorf("open DB: %w", err)
+		}
+		defer st.Close()
+
+		a, err := st.GetApplicationByJobID(args[0])
+		if err != nil {
+			return err
+		}
+		if a == nil {
+			return fmt.Errorf("no application record for job %s", args[0])
+		}
+		req, err := appengine.BuildSendRequest(a)
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			return render.AsJSON(os.Stdout, req)
+		}
+		fmt.Fprintf(os.Stdout, "Explicit send request ready for job %s\n", req.JobID)
+		fmt.Fprintf(os.Stdout, "Gmail draft: %s\n", req.GmailDraftID)
+		fmt.Fprintln(os.Stdout, "This command did not send the email.")
+		return nil
+	},
+}
+
+var applicationsRecordSentCmd = &cobra.Command{
+	Use:   "record-sent <job_id>",
+	Short: "Record Gmail provider ids after an explicitly approved draft was sent",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if strings.TrimSpace(applicationsMessageID) == "" {
+			return fmt.Errorf("--message-id is required")
+		}
+		st, err := openStore()
+		if err != nil {
+			return fmt.Errorf("open DB: %w", err)
+		}
+		defer st.Close()
+
+		a, err := st.MarkApplicationSent(args[0], applicationsMessageID, applicationsThreadID)
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			return render.AsJSON(os.Stdout, a)
+		}
+		fmt.Fprintf(os.Stdout, "SENT          %s  Gmail message %s\n", a.JobID, a.GmailMessageID)
+		if a.GmailThreadID != "" {
+			fmt.Fprintf(os.Stdout, "Thread:       %s\n", a.GmailThreadID)
+		}
+		fmt.Fprintln(os.Stdout, "Sent state recorded from the Gmail provider result.")
+		return nil
+	},
+}
+
 var applicationsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List application queue records",
@@ -476,6 +540,15 @@ var applicationsShowCmd = &cobra.Command{
 		if a.ReviewNote != "" {
 			fmt.Fprintf(os.Stdout, "Review note: %s\n", a.ReviewNote)
 		}
+		if a.GmailMessageID != "" {
+			fmt.Fprintf(os.Stdout, "Gmail msg:   %s\n", a.GmailMessageID)
+		}
+		if a.GmailThreadID != "" {
+			fmt.Fprintf(os.Stdout, "Gmail thread:%s\n", " "+a.GmailThreadID)
+		}
+		if a.SentAt != "" {
+			fmt.Fprintf(os.Stdout, "Sent at:     %s\n", a.SentAt)
+		}
 		if a.Body != "" {
 			fmt.Fprintf(os.Stdout, "\nEmail body:\n%s\n", a.Body)
 		}
@@ -500,6 +573,8 @@ func init() {
 	applicationsRecordDraftCmd.Flags().StringVar(&applicationsDraftID, "draft-id", "", "Gmail draft id returned by the draft provider")
 	applicationsApproveCmd.Flags().StringVar(&applicationsReviewNote, "note", "", "optional manual review note")
 	applicationsUnapproveCmd.Flags().StringVar(&applicationsReviewNote, "note", "", "optional reason for reopening review")
+	applicationsRecordSentCmd.Flags().StringVar(&applicationsMessageID, "message-id", "", "Gmail message id returned after send_draft")
+	applicationsRecordSentCmd.Flags().StringVar(&applicationsThreadID, "thread-id", "", "optional Gmail thread id returned after send_draft")
 
 	applicationsListCmd.Flags().IntVar(&applicationsLimit, "limit", 50, "maximum application records to list")
 	applicationsListCmd.Flags().StringVar(&applicationsState, "state", "", "filter by lifecycle state, e.g. READY_EMAIL")
@@ -511,6 +586,8 @@ func init() {
 	applicationsCmd.AddCommand(applicationsRecordDraftCmd)
 	applicationsCmd.AddCommand(applicationsApproveCmd)
 	applicationsCmd.AddCommand(applicationsUnapproveCmd)
+	applicationsCmd.AddCommand(applicationsSendRequestCmd)
+	applicationsCmd.AddCommand(applicationsRecordSentCmd)
 	applicationsCmd.AddCommand(applicationsListCmd)
 	applicationsCmd.AddCommand(applicationsShowCmd)
 	rootCmd.AddCommand(applicationsCmd)
