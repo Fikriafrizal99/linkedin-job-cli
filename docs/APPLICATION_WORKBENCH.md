@@ -40,7 +40,8 @@ POST /app/jobs/bulk/process-to-draft
 - select up to 50 visible jobs from the filtered Jobs table;
 - only jobs without an existing application record are newly queued;
 - explicit EMAIL + recipient becomes `READY_EMAIL`;
-- jobs without an explicit application recipient become `NEED_REVIEW`;
+- jobs without an explicit application recipient are skipped by default and remain only in Jobs;
+- an explicit **Include jobs without email as NEED_REVIEW** checkbox is required to queue those records into `NEED_REVIEW`;
 - existing application records are skipped rather than overwritten;
 - the current Jobs filters are preserved after the action.
 
@@ -67,7 +68,8 @@ Rules:
 - maximum 25 selected jobs per process-to-draft batch;
 - existing `DRAFT_CREATED` records are not duplicated; they are added directly to the resulting Review Queue;
 - `APPROVED` and `SENT` records are skipped;
-- `NEED_REVIEW` records stop before preparation/draft creation;
+- newly selected jobs without an explicit email are skipped entirely by Process Selected to Draft and are not added to Applications;
+- already-queued `NEED_REVIEW` records remain unchanged and stop before preparation/draft creation;
 - the app never guesses a missing recipient;
 - supporting-file selections in the Jobs toolbar apply to each newly created draft;
 - Portfolio is preselected when configured, but remains user-controllable;
@@ -165,6 +167,25 @@ DRAFT_CREATED → APPROVED
 ```
 
 Approval does not send email.
+
+## Remove from Queue
+
+Applications that have not reached Gmail can be removed from the application pipeline without deleting the collected Job.
+
+Routes:
+
+```text
+POST /app/applications/<job_id>/remove
+POST /app/applications/bulk/remove
+```
+
+Rules:
+
+- allowed only for `READY_EMAIL` and `NEED_REVIEW`;
+- the collected job remains in the Jobs database and returns to `NOT_APPLIED` in the Jobs view;
+- prepared subject/body/CV metadata is discarded with the application record;
+- `DRAFT_CREATED`, `APPROVED`, and `SENT` are protected because provider/review history already exists;
+- bulk removal skips protected records rather than deleting them.
 
 ## Recover a deleted Gmail draft
 
