@@ -149,41 +149,13 @@ func normalizeImportedCookieHeader(raw string) string {
 		return ""
 	}
 
-	// Chrome/Edge "Copy request headers" can wrap a long Cookie header across
-	// multiple physical clipboard lines. Collect the Cookie line plus any
-	// continuation lines until the next HTTP header starts.
-	if strings.Contains(raw, "\n") {
-		lines := strings.Split(raw, "\n")
-		var cookieParts []string
-		collecting := false
+	// Fast path: a raw Cookie header value was piped directly.
+	if !strings.Contains(raw, "\n") && !strings.HasPrefix(strings.ToLower(raw), "cookie:") {
+		return strings.TrimSpace(strings.TrimSuffix(raw, ";"))
+	}
 
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
-
-			lower := strings.ToLower(trimmed)
-			if strings.HasPrefix(lower, "cookie:") {
-				collecting = true
-				part := strings.TrimSpace(trimmed[len("cookie:"):])
-				if part != "" {
-					cookieParts = append(cookieParts, part)
-				}
-				continue
-			}
-
-			if collecting {
-				if looksLikeHTTPHeaderLine(trimmed) {
-					break
-				}
-				cookieParts = append(cookieParts, trimmed)
-			}
-		}
-
-		if len(cookieParts) > 0 {
-			raw = strings.Join(cookieParts, " ")
-		}
+	if header := cookieHeaderFromCopiedHeaders(raw); header != "" {
+		return strings.TrimSpace(strings.TrimSuffix(header, ";"))
 	}
 
 	if strings.HasPrefix(strings.ToLower(raw), "cookie:") {
@@ -192,8 +164,67 @@ func normalizeImportedCookieHeader(raw string) string {
 	return strings.TrimSpace(strings.TrimSuffix(raw, ";"))
 }
 
-// looksLikeHTTPHeaderLine identifies the beginning of the next copied request
-// header. HTTP/2 pseudo-headers (:authority, :method) count as headers too.
+// cookieHeaderFromCopiedHeaders accepts both common Chrome DevTools clipboard
+// formats:
+//
+//   Cookie: li_at=...; JSESSIONID=...
+//
+// and the newer name/value layout:
+//
+//   cookie
+//   li_at=...; JSESSIONID=...
+//
+// It also tolerates visually wrapped Cookie values. No cookie value is logged.
+func cookieHeaderFromCopiedHeaders(raw string) string {
+	lines := strings.Split(raw, "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		lower := strings.ToLower(line)
+
+		// Traditional "Cookie: value" representation.
+		if strings.HasPrefix(lower, "cookie:") {
+			parts := []string{}
+			if v := strings.TrimSpace(line[len("cookie:"):]); v != "" {
+				parts = append(parts, v)
+			}
+			for j := i + 1; j < len(lines); j++ {
+				next := strings.TrimSpace(lines[j])
+				if next == "" {
+					continue
+				}
+				if looksLikeHTTPHeaderLine(next) || looksLikeHeaderNameOnly(next) {
+					break
+				}
+				parts = append(parts, next)
+			}
+			return strings.Join(parts, " ")
+		}
+
+		// Chromium DevTools may copy the grid as alternating header-name and
+		// header-value lines, so "cookie" can appear on a line by itself.
+		if lower == "cookie" {
+			parts := []string{}
+			for j := i + 1; j < len(lines); j++ {
+				next := strings.TrimSpace(lines[j])
+				if next == "" {
+					continue
+				}
+				if len(parts) > 0 && (looksLikeHTTPHeaderLine(next) || looksLikeHeaderNameOnly(next)) {
+					break
+				}
+				parts = append(parts, next)
+			}
+			return strings.Join(parts, " ")
+		}
+	}
+	return ""
+}
+
+// looksLikeHTTPHeaderLine identifies "name: value" copied-header lines. HTTP/2
+// pseudo-headers (:authority, :method) count as headers too.
 func looksLikeHTTPHeaderLine(line string) bool {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -207,14 +238,40 @@ func looksLikeHTTPHeaderLine(line string) bool {
 		return false
 	}
 	for _, r := range line[:idx] {
-		if !((r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			strings.ContainsRune("!#$%&'*+-.^_|~", r)) {
+		if !isHTTPHeaderNameRune(r) {
 			return false
 		}
 	}
 	return true
+}
+
+// looksLikeHeaderNameOnly detects the alternating DevTools copy layout where a
+// header name and value are placed on separate lines. Cookie continuation
+// chunks contain '=' or ';', so they are not mistaken for names.
+func looksLikeHeaderNameOnly(line string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.ContainsAny(line, "=; \t/") {
+		return false
+	}
+	if strings.HasPrefix(line, ":") {
+		line = strings.TrimPrefix(line, ":")
+	}
+	if line == "" {
+		return false
+	}
+	for _, r := range line {
+		if !isHTTPHeaderNameRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isHTTPHeaderNameRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9') ||
+		strings.ContainsRune("!#$%&'*+-.^_|~", r)
 }
 
 func cookieHeaderHas(header, name string) bool {
