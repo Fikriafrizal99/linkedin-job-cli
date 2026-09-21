@@ -252,9 +252,11 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd.MethodFilter = strings.TrimSpace(r.URL.Query().Get("method"))
 	pd.StateFilter = strings.TrimSpace(r.URL.Query().Get("state"))
 
-	if v := strings.TrimSpace(r.URL.Query().Get("keywords")); v != "" { pd.CollectKeywords = v }
-	if v := strings.TrimSpace(r.URL.Query().Get("location")); v != "" { pd.CollectLocation = v }
-	if v := strings.TrimSpace(r.URL.Query().Get("posted_within")); v != "" { pd.CollectPostedWithin = v }
+	if r.URL.Query().Has("keywords") { pd.CollectKeywords = strings.TrimSpace(r.URL.Query().Get("keywords")) }
+	if r.URL.Query().Has("location") { pd.CollectLocation = strings.TrimSpace(r.URL.Query().Get("location")) }
+	if r.URL.Query().Has("posted_within") {
+		if v := strings.TrimSpace(r.URL.Query().Get("posted_within")); v != "" { pd.CollectPostedWithin = v }
+	}
 	if v := strings.TrimSpace(r.URL.Query().Get("top")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 100 { pd.CollectTop = n }
 	}
