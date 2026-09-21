@@ -79,6 +79,8 @@ Binds to localhost only by default.`,
 		mux.HandleFunc("POST /app/jobs/{id}/queue", ws.handleAppQueueApplication)
 		mux.HandleFunc("POST /app/applications/{id}/prepare", ws.handleAppPrepareApplication)
 		mux.HandleFunc("POST /app/applications/{id}/draft", ws.handleAppCreateGmailDraft)
+		mux.HandleFunc("POST /app/applications/{id}/approve", ws.handleAppApproveApplication)
+		mux.HandleFunc("POST /app/applications/{id}/unapprove", ws.handleAppUnapproveApplication)
 		mux.HandleFunc("POST /app/cv-profiles/upload", ws.handleCVProfileUpload)
 		mux.HandleFunc("POST /app/cv-profiles/{id}/update", ws.handleCVProfileUpdate)
 		mux.HandleFunc("POST /app/cv-profiles/{id}/default", ws.handleCVProfileDefault)
