@@ -57,8 +57,8 @@ Future project/module:
 
 - [x] read eligible jobs from collector;
 - [x] application queue with separate lifecycle persistence;
-- [ ] CV selection;
-- [ ] subject/body generation;
+- [x] deterministic CV selection from configured profiles;
+- [x] deterministic subject/body generation and persistence;
 - [ ] Gmail draft creation;
 - [ ] manual review;
 - [ ] explicit send;
@@ -78,6 +78,36 @@ linkedin-jobs applications show <job_id>
 ```
 
 Batch queue defaults to jobs with an explicit application email. Non-email jobs are only queued as `NEED_REVIEW` when requested with `--include-review`. Application lifecycle state is stored in a separate `applications` table so collector-owned job state remains independent. Queueing is idempotent by `job_id`.
+
+### P3.2 — CV Selection + Email Preparation
+
+Application settings live under `application:` in `settings.yaml`:
+
+```yaml
+application:
+  candidate_name: "Your Name"
+  default_cv_profile: general
+  cv_profiles:
+    - id: general
+      path: /absolute/path/to/cv-general.pdf
+      priority: 1
+    - id: sales
+      path: /absolute/path/to/cv-sales.pdf
+      priority: 10
+      keywords: [sales, account executive, business development]
+```
+
+The selector scores configured keywords deterministically, weighting title matches above description matches, then falls back to `default_cv_profile`. A profile can be overridden explicitly with `--cv-profile`.
+
+```bash
+linkedin-jobs applications profiles
+linkedin-jobs applications prepare <job_id>
+linkedin-jobs applications prepare --all --limit 50
+linkedin-jobs applications prepare <job_id> --cv-profile sales
+linkedin-jobs applications show <job_id>
+```
+
+Preparation persists `cv_profile`, `subject`, and `body` but keeps the application in `READY_EMAIL`; it does not create or send an email.
 
 ## Explicitly Deferred
 
