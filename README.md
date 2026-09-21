@@ -373,16 +373,22 @@ From Jobs:
 
 - Select all visible / multi-select filtered jobs
 - Queue Selected
-- Process Selected to Draft (Queue → Prepare → Gmail Draft → Review Queue)
+- Process Selected, which routes supported jobs by application method:
+  - EMAIL → Prepare → Gmail Draft → Review Queue
+  - EASY_APPLY → manual Easy Apply Queue
+  - unsupported destinations → skipped by default
 
 From Applications:
 
 - Prepare Selected
 - Create Drafts
 - Review Selected / Review Draft Queue
+- Work the Easy Apply Queue one item at a time
+- Open LinkedIn Easy Apply in a new tab, or explicitly open the next 3
+- Mark Applied & Next only after manually submitting on LinkedIn
 - Confirm Send for already-APPROVED Gmail drafts
 
-The Review Queue provides sequential `Approve & Next` review so multiple Gmail drafts can be processed without opening every Application Detail page. Sending remains explicit: a separate final confirmation page and checkbox are required before Gmail `drafts.send` is called. There is no auto-send or auto-apply.
+The Review Queue provides sequential `Approve & Next` review for email applications. The Easy Apply Queue uses `READY_EASY_APPLY → IN_PROGRESS → APPLIED`; opening LinkedIn never counts as submission, and APPLIED requires explicit human confirmation after manual submission. Sending remains explicit: a separate final confirmation page and checkbox are required before Gmail `drafts.send` is called. There is no auto-send, LinkedIn form auto-fill, or auto-submit.
 
 See [Application Workbench](docs/APPLICATION_WORKBENCH.md), [Gmail Setup](docs/GMAIL_SETUP.md), and [UI Reference](docs/UI_REFERENCE.md) for the current workflow and safety boundaries.
 
