@@ -215,6 +215,86 @@ func (ws *webServer) handleAppCreateGmailDraft(w http.ResponseWriter, r *http.Re
 	http.Redirect(w, r, "/app/applications/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
 }
 
+func (ws *webServer) handleAppRecreateGmailDraft(w http.ResponseWriter, r *http.Request) {
+	if !ws.checkCSRF(w, r) {
+		return
+	}
+	if r.PostFormValue("recreate_confirm") != "1" {
+		jobID := strings.TrimSpace(r.PathValue("id"))
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("confirm draft recreation before creating a replacement Gmail draft"))
+		return
+	}
+
+	ws.lifecycleMu.Lock()
+	defer ws.lifecycleMu.Unlock()
+
+	jobID := strings.TrimSpace(r.PathValue("id"))
+	if jobID == "" {
+		http.Error(w, "missing job id", http.StatusBadRequest)
+		return
+	}
+	a, err := ws.st.GetApplicationByJobID(jobID)
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+	if a == nil {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("application is not queued"))
+		return
+	}
+
+	settings, err := config.LoadSettings()
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("load settings: %w", err))
+		return
+	}
+	payload, err := appengine.BuildRecreateDraftPayload(a, settings.Application)
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+
+	extraAttachments, err := resolveAttachments(
+		settings.Application.Attachments,
+		r.PostForm["attachment"],
+		settings.Application.CandidateName,
+	)
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+	for _, attachment := range extraAttachments {
+		payload.AttachmentFiles = append(payload.AttachmentFiles, attachment.Path)
+		payload.AttachmentNames = append(payload.AttachmentNames, attachment.Name)
+	}
+	payload.Body = draftBodyForAttachments(payload.Body, extraAttachments)
+	if err := validateDraftAttachmentTotal(payload.AttachmentFiles, 18<<20); err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+
+	creds, err := gmailclient.LoadCredentials("")
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("Gmail is not configured: %w", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	result, err := gmailclient.CreateDraft(ctx, http.DefaultClient, creds, "", payload)
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+	if _, err := ws.st.ReplaceApplicationDraft(jobID, result.DraftID); err != nil {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("replacement Gmail draft %s was created, but local state update failed: %w", result.DraftID, err))
+		return
+	}
+
+	q := url.Values{"draft_recreated": {"1"}, "draft_id": {result.DraftID}}
+	http.Redirect(w, r, "/app/applications/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
+}
+
 func gmailRedirectURI(r *http.Request) (string, error) {
 	host, port, err := net.SplitHostPort(r.Host)
 	if err != nil {
