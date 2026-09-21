@@ -22,7 +22,25 @@ Final Send Confirmation
 SENT
 ```
 
-There is no automatic LinkedIn apply, automatic approval, or automatic email send.
+There is no automatic LinkedIn submission, automatic approval, or automatic email send.
+
+Easy Apply uses a separate manual lifecycle:
+
+```text
+READY_EASY_APPLY
+    ↓
+Open LinkedIn Easy Apply
+    ↓
+IN_PROGRESS
+    ↓
+Human submits on LinkedIn
+    ↓
+Mark Applied & Next
+    ↓
+APPLIED
+```
+
+Opening the LinkedIn page never marks an application as APPLIED. APPLIED requires an explicit local confirmation after the user submits the form manually.
 
 ## Database Jobs → Review Queue
 
@@ -40,43 +58,92 @@ POST /app/jobs/bulk/process-to-draft
 - select up to 50 visible jobs from the filtered Jobs table;
 - only jobs without an existing application record are newly queued;
 - explicit EMAIL + recipient becomes `READY_EMAIL`;
-- jobs without an explicit application recipient are skipped by default and remain only in Jobs;
-- an explicit **Include jobs without email as NEED_REVIEW** checkbox is required to queue those records into `NEED_REVIEW`;
+- LinkedIn / Easy Apply jobs become `READY_EASY_APPLY`;
+- unsupported jobs without an email or Easy Apply path are skipped by default and remain only in Jobs;
+- an explicit **Include unsupported jobs as NEED_REVIEW** checkbox is required to queue unsupported records into `NEED_REVIEW`;
 - existing application records are skipped rather than overwritten;
 - the current Jobs filters are preserved after the action.
 
-### Process Selected to Draft
+### Process Selected
 
-`Process Selected to Draft` is the fast path from the collector database into human review:
+`Process Selected` is the fast path from the collector database into the correct channel-specific queue:
 
 ```text
 selected Jobs
     ↓
-Queue when needed
-    ↓
-deterministic Prepare when needed
-    ↓
-Gmail drafts.create
-    ↓
-DRAFT_CREATED
-    ↓
-Review Queue
+route by application method
+    ├── EMAIL
+    │    ↓
+    │ deterministic Prepare
+    │    ↓
+    │ Gmail drafts.create
+    │    ↓
+    │ DRAFT_CREATED → Review Queue
+    │
+    ├── EASY_APPLY
+    │    ↓
+    │ READY_EASY_APPLY
+    │    ↓
+    │ Easy Apply Queue
+    │
+    └── unsupported
+         ↓
+       skipped
 ```
 
 Rules:
 
-- maximum 25 selected jobs per process-to-draft batch;
+- maximum 25 selected jobs per Process Selected batch;
 - existing `DRAFT_CREATED` records are not duplicated; they are added directly to the resulting Review Queue;
-- `APPROVED` and `SENT` records are skipped;
-- newly selected jobs without an explicit email are skipped entirely by Process Selected to Draft and are not added to Applications;
-- already-queued `NEED_REVIEW` records remain unchanged and stop before preparation/draft creation;
-- the app never guesses a missing recipient;
-- supporting-file selections in the Jobs toolbar apply to each newly created draft;
+- existing `READY_EASY_APPLY` / `IN_PROGRESS` records are reused rather than duplicated;
+- `APPROVED`, `SENT`, and `APPLIED` records are skipped;
+- unsupported jobs are skipped unless explicitly queued through the NEED_REVIEW opt-in path;
+- already-queued `NEED_REVIEW` records remain unchanged;
+- the app never guesses a missing email recipient;
+- supporting-file selections apply only to newly created Gmail drafts;
 - Portfolio is preselected when configured, but remains user-controllable;
-- Gmail must be connected before this action is available;
-- the action never approves or sends email.
+- Gmail is required only for EMAIL records. Easy Apply records can still be processed when Gmail is disconnected;
+- the action never approves, sends email, fills LinkedIn forms, or submits LinkedIn applications.
 
-After at least one draft is available, the browser redirects directly to the Review Queue containing the eligible selected records.
+If email drafts are present, the browser opens the Review Queue first and provides a link to the Easy Apply items from the same batch. If the batch contains only Easy Apply work, it opens the Easy Apply Queue directly.
+
+## Easy Apply Queue
+
+Route:
+
+```text
+GET  /app/applications/easy-apply
+POST /app/applications/<job_id>/easy-apply/open
+POST /app/applications/<job_id>/easy-apply/applied
+```
+
+The queue processes one LinkedIn Easy Apply record at a time without requiring the user to open each Application Detail page.
+
+Each queue item shows:
+
+- job title and company;
+- lifecycle state;
+- LinkedIn apply URL availability;
+- opened timestamp;
+- deterministic recommended CV profile and file readiness;
+- Previous / Skip / Next navigation.
+
+Actions:
+
+- **Open LinkedIn Easy Apply ↗** opens the LinkedIn job in a new browser tab and changes `READY_EASY_APPLY → IN_PROGRESS`;
+- **Open Next 3** is an explicit convenience action that opens up to the next three queue items in new tabs and marks those items IN_PROGRESS locally;
+- **Mark Applied & Next** requires a confirmation checkbox stating that the user manually submitted the application on LinkedIn, stores the selected CV profile, changes `IN_PROGRESS → APPLIED`, removes that item from the active queue, and advances to the next original item;
+- **Skip / Next** does not alter submission state.
+
+Browser popup settings may block some tabs opened by **Open Next 3**. The application does not bypass popup controls.
+
+Security and control boundaries:
+
+- only LinkedIn job URLs are accepted by the Easy Apply open endpoint;
+- no LinkedIn form fields are populated by this workflow;
+- no submit button is clicked automatically;
+- opening a tab is not treated as proof of submission;
+- `APPLIED` is protected from Remove from Queue.
 
 ## Batch actions
 
@@ -181,10 +248,10 @@ POST /app/applications/bulk/remove
 
 Rules:
 
-- allowed only for `READY_EMAIL` and `NEED_REVIEW`;
+- allowed for `READY_EMAIL`, `NEED_REVIEW`, `READY_EASY_APPLY`, and `IN_PROGRESS`;
 - the collected job remains in the Jobs database and returns to `NOT_APPLIED` in the Jobs view;
-- prepared subject/body/CV metadata is discarded with the application record;
-- `DRAFT_CREATED`, `APPROVED`, and `SENT` are protected because provider/review history already exists;
+- prepared subject/body/CV metadata is discarded with the application record where applicable;
+- `DRAFT_CREATED`, `APPROVED`, `SENT`, and `APPLIED` are protected because provider/review/submission history already exists;
 - bulk removal skips protected records rather than deleting them.
 
 ## Recover a deleted Gmail draft
@@ -288,7 +355,8 @@ A first error is also surfaced when failures occur.
 - Sending requires a second, separate final confirmation checkbox.
 - Bulk send only accepts `APPROVED` records with a Gmail draft ID.
 - No auto-send.
-- No auto-apply.
+- No LinkedIn form auto-fill.
+- No auto-apply or auto-submit.
 - No auto-DM or LinkedIn connection requests.
 - Follow-up automation remains out of scope.
 - Batch lifecycle operations are serialized by the local server to reduce conflicting updates.
@@ -304,4 +372,4 @@ Backend/unit regression coverage is included for:
 - Review Queue rendering;
 - final send confirmation rendering.
 
-The Applications batch workbench has been live-validated. The new Jobs database bulk intake / Process Selected to Draft flow is implemented with regression coverage and is pending live browser validation.
+The Applications batch workbench has been live-validated. The Jobs database bulk intake is implemented with regression coverage. The Easy Apply manual workflow is implemented with regression coverage and is pending live browser validation on the user's machine.
