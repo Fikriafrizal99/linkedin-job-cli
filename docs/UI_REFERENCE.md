@@ -309,6 +309,8 @@ Implementation boundaries:
 
 Gmail OAuth connection and native Gmail draft creation have been live-validated in the user's local browser. Multi-attachment Gmail draft creation has also been live-validated with a CV plus portfolio attachment.
 
+Draft polish now keeps managed storage IDs out of the outgoing MIME filename. Optional supporting files use a human-readable Gmail filename derived from the candidate name + attachment label, and the email body changes from “CV attached” to “CV and portfolio/supporting documents attached” when optional files are selected.
+
 See `docs/GMAIL_SETUP.md` for setup instructions.
 
 ## Reference assets
