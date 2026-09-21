@@ -18,9 +18,10 @@ type Settings struct {
 }
 
 type ApplicationSettings struct {
-	CandidateName    string              `yaml:"candidate_name,omitempty"`
-	DefaultCVProfile string              `yaml:"default_cv_profile,omitempty"`
-	CVProfiles       []CVProfileSettings `yaml:"cv_profiles,omitempty"`
+	CandidateName    string               `yaml:"candidate_name,omitempty"`
+	DefaultCVProfile string               `yaml:"default_cv_profile,omitempty"`
+	CVProfiles       []CVProfileSettings  `yaml:"cv_profiles,omitempty"`
+	Attachments      []AttachmentSettings `yaml:"attachments,omitempty"`
 }
 
 type CVProfileSettings struct {
@@ -28,6 +29,13 @@ type CVProfileSettings struct {
 	Path     string   `yaml:"path,omitempty"`
 	Keywords []string `yaml:"keywords,omitempty"`
 	Priority int      `yaml:"priority,omitempty"`
+}
+
+type AttachmentSettings struct {
+	ID    string `yaml:"id"`
+	Label string `yaml:"label,omitempty"`
+	Kind  string `yaml:"kind,omitempty"`
+	Path  string `yaml:"path,omitempty"`
 }
 
 // ProfileSettings holds the structured candidate preferences that drive the
@@ -229,6 +237,7 @@ application:
   candidate_name: ""
   default_cv_profile: ""
   cv_profiles: []
+  attachments: []
 `
 
 // EnsureSettings writes a default settings.yaml to SettingsPath() if the file
@@ -327,6 +336,41 @@ func SaveRubrics(rubrics []Rubric) error {
 	out, err := yaml.Marshal(root)
 	if err != nil {
 		return fmt.Errorf("marshal settings: %w", err)
+	}
+	return os.WriteFile(path, out, 0o644)
+}
+
+
+// SaveApplicationSettings writes the application section into settings.yaml
+// while preserving scoring/profile and any unrelated top-level configuration.
+func SaveApplicationSettings(app ApplicationSettings) error {
+	path := SettingsPath()
+	var root map[string]any
+	data, err := os.ReadFile(path)
+	if err == nil {
+		_ = yaml.Unmarshal(data, &root)
+	}
+	if root == nil {
+		root = map[string]any{}
+	}
+	stripObsoleteSettingsKeys(root)
+
+	raw, err := yaml.Marshal(app)
+	if err != nil {
+		return fmt.Errorf("marshal application settings: %w", err)
+	}
+	var appMap map[string]any
+	if err := yaml.Unmarshal(raw, &appMap); err != nil {
+		return fmt.Errorf("remarshal application settings: %w", err)
+	}
+	root["application"] = appMap
+
+	out, err := yaml.Marshal(root)
+	if err != nil {
+		return fmt.Errorf("marshal settings: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create settings directory: %w", err)
 	}
 	return os.WriteFile(path, out, 0o644)
 }
