@@ -260,7 +260,7 @@ It delegates to the existing deterministic Application Engine:
 
 Re-preparation remains available while a record is still `READY_EMAIL`. Once it reaches `DRAFT_CREATED`, `APPROVED`, or `SENT`, existing backend lifecycle guards prevent silent re-preparation. The prepare action has been live-validated in the user's local browser.
 
-### CV Profiles file management — implemented, pending live validation
+### CV Profiles file management — CV upload live validated / additional attachments pending live validation
 
 File management stays inside `/app/cv-profiles`; there is no separate Documents page.
 
@@ -276,6 +276,8 @@ POST /app/cv-profiles/attachments/<id>/delete
 ```
 
 Uploaded CVs and supporting files are stored under the local `~/.linkedin-jobs/files/` directory. Application Detail exposes configured supporting files as optional checkboxes and includes only the selected files when creating the Gmail draft.
+
+CV upload/replace from the CV Profiles page has been live-validated in the user's local browser. Additional supporting-file upload and Gmail draft creation with selected optional attachments remain pending live validation.
 
 ### Native Gmail OAuth — live validated / Draft creation pending live validation
 
