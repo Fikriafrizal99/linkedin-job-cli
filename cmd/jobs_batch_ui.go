@@ -28,6 +28,7 @@ type jobProcessResult struct {
 	DraftCreated   int
 	ExistingDrafts int
 	NeedReview     int
+	NonEmailSkipped int
 	Skipped        int
 	Failed         int
 	ReviewIDs      []string
@@ -50,6 +51,7 @@ func (ws *webServer) handleAppBulkQueueJobs(w http.ResponseWriter, r *http.Reque
 	defer ws.lifecycleMu.Unlock()
 
 	result := jobProcessResult{Selected: len(ids)}
+	includeNeedReview := r.PostFormValue("include_need_review") == "1"
 	for _, id := range ids {
 		existing, getErr := ws.st.GetApplicationByJobID(id)
 		if getErr != nil {
@@ -59,6 +61,16 @@ func (ws *webServer) handleAppBulkQueueJobs(w http.ResponseWriter, r *http.Reque
 		}
 		if existing != nil {
 			result.Skipped++
+			continue
+		}
+		job, getErr := ws.st.Get(id)
+		if getErr != nil {
+			result.Failed++
+			setJobProcessError(&result, fmt.Errorf("%s: %w", id, getErr))
+			continue
+		}
+		if !jobHasExplicitApplicationEmail(job) && !includeNeedReview {
+			result.NonEmailSkipped++
 			continue
 		}
 		app, queueErr := ws.st.QueueApplication(id)
@@ -160,6 +172,16 @@ func processJobsToDraft(
 		}
 
 		if app == nil {
+			job, getErr := st.Get(id)
+			if getErr != nil {
+				result.Failed++
+				setJobProcessError(&result, fmt.Errorf("%s: %w", id, getErr))
+				continue
+			}
+			if !jobHasExplicitApplicationEmail(job) {
+				result.NonEmailSkipped++
+				continue
+			}
 			app, err = st.QueueApplication(id)
 			if err != nil {
 				result.Failed++
@@ -234,6 +256,12 @@ func processJobsToDraft(
 	return result
 }
 
+func jobHasExplicitApplicationEmail(job *models.JobPosting) bool {
+	return job != nil &&
+		strings.EqualFold(strings.TrimSpace(job.ApplicationMethod), "EMAIL") &&
+		strings.TrimSpace(job.ApplyEmail) != ""
+}
+
 func applicationIsPrepared(app *models.JobApplication) bool {
 	return app != nil &&
 		strings.TrimSpace(app.Subject) != "" &&
@@ -294,6 +322,7 @@ func addJobProcessResultQuery(q url.Values, result jobProcessResult) {
 	q.Set("draft_count", strconv.Itoa(result.DraftCreated))
 	q.Set("existing_draft_count", strconv.Itoa(result.ExistingDrafts))
 	q.Set("need_review_count", strconv.Itoa(result.NeedReview))
+	q.Set("non_email_skipped_count", strconv.Itoa(result.NonEmailSkipped))
 	q.Set("skipped_count", strconv.Itoa(result.Skipped))
 	q.Set("failed_count", strconv.Itoa(result.Failed))
 }
