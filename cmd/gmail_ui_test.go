@@ -150,6 +150,8 @@ func TestApplicationDetailRendersGmailDraftActionOnlyWhenConnected(t *testing.T)
 			CandidateName: "Candidate",
 			CandidateInitials: "C",
 			SelectedApplication: app,
+			SelectedCVPath: "/tmp/CV.pdf",
+			SelectedCVReady: true,
 			GmailConnected: connected,
 		})
 		if err != nil {
@@ -167,5 +169,40 @@ func TestApplicationDetailRendersGmailDraftActionOnlyWhenConnected(t *testing.T)
 	if strings.Contains(disconnected, `action="/app/applications/50010/draft"`) ||
 		!strings.Contains(disconnected, "Connect Gmail in Settings") {
 		t.Fatal("disconnected application detail should require Gmail connection")
+	}
+}
+
+
+func TestApplicationDetailBlocksGmailDraftWhenCVFileMissing(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	app := &models.JobApplication{
+		JobID: "50011",
+		State: models.ApplicationStateReadyEmail,
+		Recipient: "jobs@example.com",
+		Subject: "Application",
+		Body: "Body",
+		CVProfile: "general",
+	}
+	var b strings.Builder
+	if err := tpl.Execute(&b, appPageData{
+		Title: "Application Detail",
+		Active: "applications",
+		CSRF: "csrf",
+		CandidateName: "Candidate",
+		CandidateInitials: "C",
+		SelectedApplication: app,
+		SelectedCVPath: "/missing/CV.pdf",
+		SelectedCVReady: false,
+		GmailConnected: true,
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := b.String()
+	if strings.Contains(out, `action="/app/applications/50011/draft"`) ||
+		!strings.Contains(out, "selected CV file is not accessible") {
+		t.Fatal("missing CV must block Gmail draft creation")
 	}
 }
