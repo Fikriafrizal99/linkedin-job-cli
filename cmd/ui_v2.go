@@ -78,6 +78,10 @@ type appPageData struct {
 	CollectLikelyReposts int
 	ActionMessage string
 	ActionError string
+	GmailCredentialsPath string
+	GmailTokenPath string
+	GmailCredentialsFound bool
+	GmailConnected bool
 	Error string
 }
 
@@ -307,6 +311,11 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		CollectKeywords: "Sales Executive", CollectLocation: "Indonesia",
 		CollectPostedWithin: "7d", CollectTop: 50,
 	}
+	gmailState := currentGmailUIState()
+	pd.GmailCredentialsPath = gmailState.CredentialsPath
+	pd.GmailTokenPath = gmailState.TokenPath
+	pd.GmailCredentialsFound = gmailState.CredentialsFound
+	pd.GmailConnected = gmailState.Connected
 
 	settings, settingsErr := config.LoadSettings()
 	if settingsErr == nil {
@@ -372,6 +381,21 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		if profile != "" {
 			pd.ActionMessage += " CV profile: " + profile + "."
 		}
+	}
+	if r.URL.Query().Get("draft_created") == "1" {
+		pd.ActionMessage = "Gmail draft created successfully."
+		if draftID := strings.TrimSpace(r.URL.Query().Get("draft_id")); draftID != "" {
+			pd.ActionMessage += " Draft ID: " + draftID + "."
+		}
+	}
+	if gmailErr := strings.TrimSpace(r.URL.Query().Get("gmail_error")); gmailErr != "" {
+		pd.ActionError = gmailErr
+	}
+	switch r.URL.Query().Get("gmail") {
+	case "connected":
+		pd.ActionMessage = "Gmail connected successfully."
+	case "disconnected":
+		pd.ActionMessage = "Gmail disconnected."
 	}
 	if r.URL.Query().Get("collect") == "done" {
 		pd.CollectSearched, _ = strconv.Atoi(r.URL.Query().Get("searched"))
@@ -731,11 +755,27 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
               <div class="form-group"><label>CV Profile</label><select name="cv_profile"><option value="">Auto (deterministic)</option>{{range .CVProfiles}}<option value="{{.ID}}" {{if eq $.SelectedApplication.CVProfile .ID}}selected{{end}}>{{.ID}}{{if .Default}} · default{{end}}</option>{{end}}</select></div>
               <div class="form-group"><label>Preparation Mode</label><input value="Deterministic template · no LLM" readonly></div>
             </div>
-            <div class="detail-actions"><button class="btn primary" type="submit">{{if .SelectedApplication.Subject}}Re-prepare Application{{else}}Prepare Application{{end}}</button></div>
+            <div class="detail-actions"><button class="btn ghost" type="submit">{{if .SelectedApplication.Subject}}Re-prepare Application{{else}}Prepare Application{{end}}</button></div>
           </form>
-          <div class="footer-note">This generates and stores subject/body + CV profile only. It does not create a Gmail draft or send email.</div>
+          {{if and .SelectedApplication.Subject .SelectedApplication.Body .SelectedApplication.CVProfile}}
+            {{if .GmailConnected}}
+              <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/draft" style="margin-top:10px">
+                <input type="hidden" name="csrf" value="{{.CSRF}}">
+                <button class="btn primary" type="submit" style="width:100%">Create Gmail Draft</button>
+              </form>
+              <div class="footer-note">Creates one Gmail draft with the configured CV attached. It does not send the email.</div>
+            {{else}}
+              <div class="alert" style="margin-top:12px">Gmail is not connected. <a class="job-link" href="/app/settings?tab=email">Connect Gmail in Settings</a> before creating a draft.</div>
+            {{end}}
+          {{else}}
+            <div class="footer-note">Prepare the application first. This only stores subject/body + CV profile and does not send email.</div>
+          {{end}}
         {{else if eq .SelectedApplication.State "NEED_REVIEW"}}
           <div class="alert" style="margin-top:16px">Recipient/email is not confirmed. Resolve the application contact before preparing this record.</div>
+        {{else if eq .SelectedApplication.State "DRAFT_CREATED"}}
+          <div class="alert success" style="margin-top:16px">Gmail draft is created and ready for manual review.</div>
+          <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a><button class="btn primary" disabled>Approve (next phase)</button></div>
+          <div class="footer-note">No email has been sent. Approval remains a separate explicit action.</div>
         {{else}}
           <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button><button class="btn ghost" disabled>Unapprove</button><button class="btn primary" disabled>Send (Optional)</button></div>
           <div class="footer-note">This lifecycle state is protected from re-preparation.</div>
@@ -803,7 +843,20 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
     <section class="content-card"><div class="content-pad">
       <div id="settings-general" class="settings-pane active"><h2>General Settings</h2><p class="muted">Current local candidate and application preferences.</p><div class="form-grid"><div class="form-group"><label>Candidate Name</label><input value="{{.CandidateName}}" readonly></div><div class="form-group"><label>Default CV Profile</label><input value="{{.DefaultCVProfile}}" readonly></div><div class="form-group"><label>Preferred Location</label><input value="{{.ProfileLocation}}" readonly></div><div class="form-group"><label>Work Arrangement</label><input value="{{.ProfileArrangement}}" readonly></div><div class="form-group"><label>Salary Floor</label><input value="{{.ProfileSalary}}" readonly></div><div class="form-group"><label>CV Profiles</label><input value="{{len .CVProfiles}} configured" readonly></div></div></div>
       <div id="settings-collector" class="settings-pane"><h2>Collector</h2><p class="muted">Runtime boundaries inherited from the collector workflow.</p><div class="info-row"><span>Source</span><b>LinkedIn</b></div><div class="info-row"><span>Default mode</span><b>Anonymous public collection</b></div><div class="info-row"><span>Detail fetching</span><b>Bounded retry/backoff</b></div><div class="info-row"><span>Dedup</span><b>Job ID + structural fingerprint</b></div><div class="info-row"><span>LLM required</span><b>No</b></div></div>
-      <div id="settings-email" class="settings-pane"><h2>Email &amp; Gmail</h2><p class="muted">Application actions remain protected by the tested lifecycle.</p><div class="info-row"><span>Draft provider</span><b>Gmail bridge</b></div><div class="info-row"><span>Draft creation</span><b>Explicit</b></div><div class="info-row"><span>Send eligibility</span><b>APPROVED only</b></div><div class="info-row"><span>Automatic send</span><b>Disabled</b></div><div class="info-row"><span>Follow-up automation</span><b>Out of scope</b></div></div>
+      <div id="settings-email" class="settings-pane"><h2>Email &amp; Gmail</h2><p class="muted">Native Gmail OAuth is used only for explicit application actions.</p>
+        <div class="info-row"><span>Status</span>{{if .GmailConnected}}<span class="badge state-approved">CONNECTED</span>{{else}}<span class="badge state-need_review">NOT CONNECTED</span>{{end}}</div>
+        <div class="field-label">OAuth credentials file</div><div class="field">{{.GmailCredentialsPath}}</div>
+        <div class="field-label">OAuth token file</div><div class="field">{{.GmailTokenPath}}</div>
+        <div class="info-row"><span>OAuth scope</span><b>gmail.compose</b></div><div class="info-row"><span>Draft creation</span><b>Explicit</b></div><div class="info-row"><span>Automatic send</span><b>Disabled</b></div>
+        {{if .GmailConnected}}
+          <form method="post" action="/app/gmail/disconnect" style="margin-top:14px"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn ghost" type="submit">Disconnect Gmail</button></form>
+        {{else if .GmailCredentialsFound}}
+          <form method="post" action="/app/gmail/connect" style="margin-top:14px"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn primary" type="submit">Connect Gmail</button></form>
+          <div class="footer-note">Google opens in your browser for consent. The app stores the resulting token locally with private file permissions.</div>
+        {{else}}
+          <div class="alert" style="margin-top:14px">Gmail OAuth credentials are not configured yet. Create a Google OAuth Desktop client with the Gmail API enabled, download its JSON, and save it to the credentials path shown above.</div>
+        {{end}}
+      </div>
       <div id="settings-cv" class="settings-pane"><h2>CV Profiles</h2><p class="muted">Profiles currently loaded from settings.yaml.</p><div class="info-row"><span>Profiles</span><b>{{len .CVProfiles}}</b></div><div class="info-row"><span>Default</span><b>{{.DefaultCVProfile}}</b></div>{{range .CVProfiles}}<div class="info-row"><span>{{.ID}}</span><b>{{.FileName}}</b></div>{{end}}</div>
       <div id="settings-db" class="settings-pane"><h2>Database &amp; Files</h2><div class="field-label">SQLite database</div><div class="field">{{.DBPath}}</div><div class="field-label">Settings file</div><div class="field">{{.SettingsPath}}</div><div class="footer-note">All data remains local to the CLI environment unless an explicit external action is requested.</div></div>
       <div id="settings-about" class="settings-pane"><h2>About</h2><p class="muted">LinkedIn Job CLI local command center.</p><div class="info-row"><span>UI reference</span><b>Full Application Suite</b></div><div class="info-row"><span>Design</span><b>Dark command center</b></div><div class="info-row"><span>Application workflow</span><b>Queue → Prepare → Draft → Review → Optional Send</b></div><div class="info-row"><span>Legacy UI</span><b>/legacy</b></div></div>
@@ -821,6 +874,9 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
     btn.classList.add('active');
     var pane=document.getElementById(btn.getAttribute('data-target')); if(pane)pane.classList.add('active');
   })});
+  if(new URLSearchParams(window.location.search).get('tab')==='email'){
+    var emailTab=document.querySelector('.js-settings-tab[data-target="settings-email"]'); if(emailTab) emailTab.click();
+  }
   var k=document.getElementById('collect-keywords'), l=document.getElementById('collect-location'), p=document.getElementById('collect-posted'), t=document.getElementById('collect-top'), out=document.getElementById('collect-preview');
   function q(v){return '"' + String(v||'').replace(/"/g,'\\\"') + '"'}
   function update(){
