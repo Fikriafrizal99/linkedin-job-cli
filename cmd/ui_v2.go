@@ -632,12 +632,10 @@ func reviewQueueURL(ids []string, pos int) string {
 	if len(ids) == 0 {
 		return "/app/applications/review"
 	}
-	if pos < 0 {
-		pos = 0
+	for pos < 0 {
+		pos += len(ids)
 	}
-	if pos >= len(ids) {
-		pos = len(ids)-1
-	}
+	pos = pos % len(ids)
 	q := url.Values{}
 	q.Set("ids", strings.Join(ids, ","))
 	q.Set("pos", strconv.Itoa(pos))
