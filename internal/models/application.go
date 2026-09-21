@@ -20,6 +20,8 @@ type JobApplication struct {
 	Body           string `json:"body,omitempty"`
 	CVProfile      string `json:"cv_profile,omitempty"`
 	GmailDraftID   string `json:"gmail_draft_id,omitempty"`
+	GmailMessageID string `json:"gmail_message_id,omitempty"`
+	GmailThreadID  string `json:"gmail_thread_id,omitempty"`
 	LastError      string `json:"last_error,omitempty"`
 	CreatedAt      string `json:"created_at,omitempty"`
 	UpdatedAt      string `json:"updated_at,omitempty"`
