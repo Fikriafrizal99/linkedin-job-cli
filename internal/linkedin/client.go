@@ -41,6 +41,55 @@ func (c *Client) HasSession() bool { return c.session != nil && c.session.Cookie
 // ErrAuthRequired is returned when an authenticated call is made without a session.
 var ErrAuthRequired = errors.New("authenticated call requires a LinkedIn session: run `linkedin-jobs auth login` to capture one")
 
+// ProbeSession performs one lightweight authenticated Voyager request without
+// following redirects. It distinguishes a structurally complete cookie set
+// from a session LinkedIn actually accepts. It does not attempt to bypass
+// login/challenge redirects.
+func (c *Client) ProbeSession() error {
+	if !c.HasSession() || c.session == nil || !c.session.Valid() {
+		return ErrAuthRequired
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "https://www.linkedin.com/voyager/api/me", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", c.cfg.UserAgent)
+	req.Header.Set("Accept", "application/vnd.linkedin.normalized+json+2.1")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Cookie", c.session.CookieHeader)
+	req.Header.Set("Csrf-Token", c.session.CSRFToken)
+	req.Header.Set("X-Restli-Protocol-Version", "2.0.0")
+	req.Header.Set("Referer", "https://www.linkedin.com/feed/")
+
+	probeClient := *c.http
+	probeClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := probeClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return nil
+	case resp.StatusCode >= 300 && resp.StatusCode < 400:
+		loc := resp.Header.Get("Location")
+		if loc == "" {
+			loc = "(redirect target hidden)"
+		}
+		return errf("LinkedIn redirected the authenticated session to %s; import the full LinkedIn Cookie header from an active browser session", loc)
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return errf("LinkedIn rejected the authenticated session (status %d)", resp.StatusCode)
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return errf("LinkedIn rate-limited the session probe (status 429); try again later")
+	default:
+		return errf("LinkedIn session probe returned status %d", resp.StatusCode)
+	}
+}
+
 // get fetches a URL with browser-like headers, optionally authenticated.
 func (c *Client) get(rawURL string, authenticated bool, extra http.Header) (string, http.Header, int, error) {
 	maxAttempts := c.cfg.HTTPMaxAttempts
