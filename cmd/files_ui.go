@@ -39,6 +39,13 @@ type appAttachment struct {
 	Size string
 }
 
+type resolvedAttachment struct {
+	Path  string
+	Name  string
+	Kind  string
+	Label string
+}
+
 func managedFilesRoot() string {
 	return filepath.Join(config.HomeDir(), "files")
 }
@@ -484,13 +491,13 @@ func removeManagedFile(path string) {
 	_ = os.Remove(abs)
 }
 
-func resolveAttachmentPaths(configured []config.AttachmentSettings, ids []string) ([]string, error) {
+func resolveAttachments(configured []config.AttachmentSettings, ids []string, candidateName string) ([]resolvedAttachment, error) {
 	byID := map[string]config.AttachmentSettings{}
 	for _, a := range configured {
 		byID[strings.ToLower(strings.TrimSpace(a.ID))] = a
 	}
 	seen := map[string]bool{}
-	var out []string
+	var out []resolvedAttachment
 	var total int64
 	for _, raw := range ids {
 		id := strings.ToLower(strings.TrimSpace(raw))
@@ -511,9 +518,81 @@ func resolveAttachmentPaths(configured []config.AttachmentSettings, ids []string
 		if total > 18<<20 {
 			return nil, fmt.Errorf("selected additional attachments exceed 18 MiB")
 		}
-		out = append(out, path)
+		out = append(out, resolvedAttachment{
+			Path:  path,
+			Name:  friendlyAttachmentName(candidateName, a.Label, path),
+			Kind:  strings.ToLower(strings.TrimSpace(a.Kind)),
+			Label: strings.TrimSpace(a.Label),
+		})
 	}
 	return out, nil
+}
+
+// resolveAttachmentPaths is kept for non-UI callers/tests that only need local
+// file paths. Gmail draft creation uses resolveAttachments so the provider sees
+// a human-friendly filename instead of the managed-storage ID.
+func resolveAttachmentPaths(configured []config.AttachmentSettings, ids []string) ([]string, error) {
+	resolved, err := resolveAttachments(configured, ids, "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(resolved))
+	for _, a := range resolved {
+		out = append(out, a.Path)
+	}
+	return out, nil
+}
+
+func friendlyAttachmentName(candidateName, label, path string) string {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(path)))
+	labelPart := filenamePart(label)
+	if labelPart == "" {
+		labelPart = filenamePart(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
+	}
+	candidatePart := filenamePart(candidateName)
+	if candidatePart != "" && labelPart != "" &&
+		!strings.Contains(strings.ToLower(labelPart), strings.ToLower(candidatePart)) {
+		labelPart = candidatePart + "_" + labelPart
+	}
+	if labelPart == "" {
+		labelPart = "Attachment"
+	}
+	return labelPart + ext
+}
+
+func filenamePart(raw string) string {
+	raw = strings.TrimSpace(raw)
+	var b strings.Builder
+	lastSep := false
+	for _, r := range raw {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			lastSep = false
+		case r == ' ' || r == '-' || r == '_' || r == '.':
+			if b.Len() > 0 && !lastSep {
+				b.WriteByte('_')
+				lastSep = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "_")
+}
+
+func draftBodyForAttachments(body string, attachments []resolvedAttachment) string {
+	if len(attachments) == 0 {
+		return body
+	}
+	label := "CV and supporting documents"
+	if len(attachments) == 1 && attachments[0].Kind == "portfolio" {
+		label = "CV and portfolio"
+	}
+	const original = "Please find my CV attached for your review."
+	replacement := "Please find my " + label + " attached for your review."
+	if strings.Contains(body, original) {
+		return strings.Replace(body, original, replacement, 1)
+	}
+	return body
 }
 
 func validateDraftAttachmentTotal(paths []string, maxBytes int64) error {
@@ -538,7 +617,7 @@ func attachmentView(a config.AttachmentSettings) appAttachment {
 		Label: strings.TrimSpace(a.Label),
 		Kind: strings.TrimSpace(a.Kind),
 		Path: path,
-		FileName: filepath.Base(path),
+		FileName: friendlyAttachmentName("", a.Label, path),
 	}
 	if info, err := os.Stat(path); err == nil && !info.IsDir() {
 		view.Exists = true
