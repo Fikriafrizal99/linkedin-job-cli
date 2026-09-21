@@ -913,7 +913,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <div class="file-list">
         {{range .Attachments}}
           <div class="file-card">
-            <div><strong>{{.Label}}</strong><small>{{.Kind}} · {{.FileName}}{{if .Size}} · {{.Size}}{{end}}</small><small>{{.Path}}</small></div>
+            <div><strong>{{.Label}}</strong><small>{{.Kind}} · {{.FileName}}{{if .Size}} · {{.Size}}{{end}}</small><small>Stored locally · friendly filename used in Gmail</small></div>
             <div>{{if .Exists}}<span class="badge state-approved">READY</span>{{else}}<span class="badge state-need_review">MISSING</span>{{end}}</div>
             <form method="post" action="/app/cv-profiles/attachments/{{.ID}}/delete" onsubmit="return confirm('Delete attachment {{.Label}}?')"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn ghost" type="submit">Delete</button></form>
           </div>
