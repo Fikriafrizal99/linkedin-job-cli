@@ -534,7 +534,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	}
 	switch section {
 	case "dashboard":
-		pd.Active, pd.Title, pd.Subtitle = "dashboard", "Dashboard", "Overview of your job search and application progress."
+		pd.Active, pd.Title, pd.Subtitle = "dashboard", "Dashboard", "A focused overview of collected jobs, application progress, and the next actions that need attention."
 		for i, j := range jobs {
 			if i >= 8 { break }
 			pd.Jobs = append(pd.Jobs, uiJobRow(j, applicationStateFor(j.ID, apps)))
@@ -545,7 +545,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.SelectedCVPath, pd.SelectedCVReady = selectedCVStatus(settings.Application.CVProfiles, pd.SelectedApplication.CVProfile)
 		}
 	case "jobs":
-		pd.Active, pd.Title, pd.Subtitle = "jobs", "Jobs", "View, search, and manage all collected job listings."
+		pd.Active, pd.Title, pd.Subtitle = "jobs", "Jobs", "Filter the collected database, select multiple jobs, and move them into the application workflow."
 		for _, j := range jobs {
 			state := applicationStateFor(j.ID, apps)
 			if !matchesUIJob(j, state, pd.Query, pd.LocationFilter, pd.MethodFilter, pd.StateFilter) {
@@ -554,7 +554,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.Jobs = append(pd.Jobs, uiJobRow(j, state))
 		}
 		if len(parts) > 1 {
-			pd.Title, pd.Subtitle = "Job Detail", "Detailed view of a collected LinkedIn job."
+			pd.Title, pd.Subtitle = "Job Detail", "Review the collected job data and decide whether it should enter the application pipeline."
 			pd.SelectedJob = jobByID[parts[1]]
 			if pd.SelectedJob == nil {
 				return pd, fmt.Errorf("job %s not found", parts[1])
@@ -565,7 +565,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			}
 		}
 	case "applications":
-		pd.Active, pd.Title, pd.Subtitle = "applications", "Applications", "Track and manage your application pipeline."
+		pd.Active, pd.Title, pd.Subtitle = "applications", "Applications", "Prepare, review, approve, and send applications from one controlled workbench."
 		for _, a := range apps {
 			j := jobByID[a.JobID]
 			if !matchesUIApplication(&a, j, pd.Query, pd.MethodFilter, pd.StateFilter) {
@@ -582,7 +582,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.Applications = append(pd.Applications, row)
 		}
 		if len(parts) > 1 && parts[1] == "review" {
-			pd.Title, pd.Subtitle = "Review Queue", "Review Gmail drafts sequentially without opening each application page."
+			pd.Title, pd.Subtitle = "Review Queue", "Review prepared Gmail drafts one by one, approve the good ones, and keep moving without reopening each record."
 			pd.ReviewMode = true
 			queue := reviewQueueIDs(apps, r.URL.Query().Get("ids"))
 			pd.ReviewTotal = len(queue)
@@ -608,7 +608,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				pd.ReviewStayURL = reviewQueueURL(queue, pos)
 			}
 		} else if len(parts) > 1 {
-			pd.Title, pd.Subtitle = "Application Detail", "Review and manage a prepared application."
+			pd.Title, pd.Subtitle = "Application Detail", "Inspect prepared content, Gmail draft state, review history, and the next lifecycle action."
 			a, err := ws.st.GetApplicationByJobID(parts[1])
 			if err != nil { return pd, err }
 			if a == nil { return pd, fmt.Errorf("application %s not found", parts[1]) }
@@ -617,11 +617,11 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.SelectedCVPath, pd.SelectedCVReady = selectedCVStatus(settings.Application.CVProfiles, a.CVProfile)
 		}
 	case "cv-profiles":
-		pd.Active, pd.Title, pd.Subtitle = "cv-profiles", "CV Profiles", "Upload and manage CVs, portfolio, and supporting application files."
+		pd.Active, pd.Title, pd.Subtitle = "cv-profiles", "CV Profiles", "Manage the CV and supporting files used during preparation and Gmail draft creation."
 	case "collect":
-		pd.Active, pd.Title, pd.Subtitle = "collect", "Collect LinkedIn Jobs", "Run the LinkedIn collector with your preferred search criteria."
+		pd.Active, pd.Title, pd.Subtitle = "collect", "Collect LinkedIn Jobs", "Collect bounded LinkedIn search results into the local jobs database for review and batch processing."
 	case "settings":
-		pd.Active, pd.Title, pd.Subtitle = "settings", "Settings", "Review application preferences and local system configuration."
+		pd.Active, pd.Title, pd.Subtitle = "settings", "Settings", "Manage candidate preferences, Gmail connectivity, CV defaults, and local runtime paths."
 	default:
 		return pd, fmt.Errorf("unknown UI page %q", section)
 	}
@@ -807,8 +807,8 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 .detail{padding:20px}.detail-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.detail-title h2,.detail h2{margin:0 0 4px;font-size:20px;font-weight:720;letter-spacing:-.015em;line-height:1.25}.detail-title p{margin:5px 0 0}.company{color:#9fb1c5;font-size:13px}.meta{display:grid;gap:8px;margin:16px 0;color:#9fb1c6;font-size:12px}.tabs{display:flex;border-bottom:1px solid #28415d;margin:2px -20px 18px;padding:0 20px}.tab{padding:10px 14px;color:#91a5bc;border-bottom:2px solid transparent;font-size:12px}.tab.active{color:#73b2ff;border-bottom-color:#3d99ff}.field-label{font-size:10.5px;font-weight:650;letter-spacing:.035em;text-transform:uppercase;color:#8fa2b9;margin:14px 0 6px}.field{background:#152a42;border:1px solid #294760;border-radius:8px;padding:11px 12px;color:#e0e8f2;white-space:pre-wrap;line-height:1.5}.email-body{min-height:160px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}.detail-actions{display:flex;gap:8px;margin-top:16px}.detail-actions .btn{flex:1}
 .quick-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}.quick{border:1px solid #223d58;background:#10243a;border-radius:10px;padding:14px}.quick strong{display:block}.quick small{color:var(--muted)}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.toolbar .search{flex:1;min-width:260px}.toolbar form{display:contents}.control{height:38px;border:1px solid #29455f;border-radius:8px;background:#13273e;color:#dbe5f1;padding:0 11px}.content-card{background:#0f2033;border:1px solid #223b56;border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.07)}.content-pad{padding:20px}.content-pad>h2{margin:0 0 6px;font-size:18px;font-weight:720;letter-spacing:-.01em}.content-pad>p.muted{margin-top:0}.two-col{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(300px,.72fr);gap:14px;align-items:start}.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.info-card{border:1px solid #27425d;background:#102338;border-radius:10px;padding:14px;min-width:0}.info-card h3{margin:0 0 10px;font-size:13px;font-weight:700}.info-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:8px 0;border-bottom:1px solid #20384f}.info-row:last-child{border-bottom:0}.info-row span:first-child{color:#8194ab}.info-row b{text-align:right;font-weight:600;white-space:normal;overflow-wrap:anywhere}
-.cv-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.cv-card{background:#10243a;border:1px solid #24415e;border-radius:12px;padding:18px;min-height:220px}.cv-card h3{margin:0;font-size:16px}.cv-default{float:right;background:#124b3a;color:#6be2af;border-radius:8px;padding:3px 7px;font-size:10px}.cv-path{color:#63aaff;margin:18px 0 8px;word-break:break-all}.cv-card p{color:#9cafc4;font-size:12px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.form-group label{display:block;color:#96a9bf;font-size:11px;margin-bottom:6px}.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #29475f;background:#142a42;color:#e5edf6;border-radius:8px;padding:10px}.collect-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.7fr);gap:14px}.progress-list{display:grid;gap:13px;margin-top:14px}.progress-item{display:flex;gap:9px;align-items:center;color:#a9b9cb}.dot{width:9px;height:9px;border-radius:50%;background:#25c58b;box-shadow:0 0 10px rgba(37,197,139,.45)}
-.settings-grid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px}.settings-menu button{display:block;width:100%;padding:10px 11px;border:0;border-radius:8px;color:#a9b9cb;background:transparent;text-align:left;cursor:pointer}.settings-menu button:hover{background:#112a43}.settings-menu button.active{background:#173b64;color:#76b4ff}.settings-pane{display:none}.settings-pane.active{display:block}.empty{padding:44px;text-align:center;color:#8194aa}
+.cv-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}.cv-card{background:#10243a;border:1px solid #24415e;border-radius:12px;padding:17px;min-height:0;box-shadow:0 8px 24px rgba(0,0,0,.06)}.cv-card h3{margin:0;font-size:16px}.cv-default{float:right;background:#124b3a;color:#6be2af;border-radius:8px;padding:3px 7px;font-size:10px}.cv-path{color:#63aaff;margin:16px 0 7px;word-break:break-all}.cv-card p{color:#9cafc4;font-size:12px;line-height:1.45}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.form-group label{display:block;color:#96a9bf;font-size:11px;font-weight:600;margin-bottom:6px}.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #29475f;background:#142a42;color:#e5edf6;border-radius:8px;padding:10px;line-height:1.4}.collect-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.7fr);gap:14px;align-items:start}.progress-list{display:grid;gap:13px;margin-top:14px}.progress-item{display:flex;gap:9px;align-items:center;color:#a9b9cb}.dot{width:9px;height:9px;border-radius:50%;background:#25c58b;box-shadow:0 0 10px rgba(37,197,139,.45)}
+.settings-grid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;align-items:start}.settings-menu button{display:block;width:100%;padding:10px 11px;border:0;border-radius:8px;color:#a9b9cb;background:transparent;text-align:left;cursor:pointer}.settings-menu button:hover{background:#112a43}.settings-menu button.active{background:#173b64;color:#76b4ff}.settings-pane{display:none}.settings-pane.active{display:block}.empty{padding:44px;text-align:center;color:#8194aa}
 .alert{padding:10px 13px;border:1px solid #6e4b25;background:#382919;color:#f1c178;border-radius:8px;margin-bottom:14px}.alert.success{border-color:#1f664d;background:#123a2e;color:#79ddb5}.collect-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:14px}.collect-summary .mini{background:#13283f;border:1px solid #29465f;border-radius:8px;padding:10px}.collect-summary b{display:block;font-size:18px}.collect-summary span{color:#8fa4bc;font-size:10px}
 .pipeline-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}.pipeline-mini{background:#10243a;border:1px solid #223d58;border-radius:10px;padding:12px 14px}.pipeline-mini b{font-size:20px;display:block}.pipeline-mini span{font-size:11px;color:#8fa4bc}.footer-note{color:#637991;font-size:11px;margin-top:14px}
 .upload-form{margin-top:14px}.checkline{display:flex;align-items:center;gap:9px;color:#b7c6d8;font-size:12px;margin-top:12px}.checkline input{width:auto}.inline-actions{display:flex;gap:8px;align-items:center;margin-top:14px}.inline-actions form{margin:0}.file-list{display:grid;gap:9px;margin-top:16px}.file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #29465f;border-radius:9px;background:#10243a}.file-card strong{display:block}.file-card small{display:block;color:#7f94ad;margin-top:3px;word-break:break-all}.attachment-picker{display:grid;gap:8px;margin-top:7px}.attachment-option{margin:0;padding:10px 12px;border:1px solid #29465f;border-radius:8px;background:#10243a}.attachment-option span{display:block}.attachment-option b,.attachment-option small{display:block}.attachment-option small{color:#7f94ad;margin-top:2px}
@@ -1088,31 +1088,34 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <input class="control search" name="q" value="{{.Query}}" placeholder="Search applications…">
         <select class="control" name="state"><option value="">All states</option>{{range .States}}{{if ne . "NOT_APPLIED"}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{.}}</option>{{end}}{{end}}</select>
         <select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{.}}</option>{{end}}</select>
-        <button class="btn primary" type="submit">Apply</button><a class="btn ghost" href="/app/applications">Reset</a>
+        <button class="btn primary" type="submit">Apply Filters</button><a class="btn ghost" href="/app/applications">Reset</a>
       </form>
       <form method="post" id="bulk-app-form">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <div class="bulk-bar">
-          <label class="checkline" style="margin:0"><input id="select-all-apps" type="checkbox"> Select all visible</label>
-          <span id="selected-count" class="batch-note">0 selected</span>
-          <div class="spacer"></div>
-          <button class="btn ghost" type="submit" formaction="/app/applications/bulk/prepare">Prepare Selected</button>
-          <button class="btn ghost" type="submit" formaction="/app/applications/bulk/draft">Create Drafts</button>
-          <button class="btn ghost" type="submit" formaction="/app/applications/bulk/review">Review Selected</button>
-          <button class="btn primary" type="submit" formaction="/app/applications/send-confirm">Confirm Send</button>
-          <a class="btn ghost" href="/app/applications/review">Review Draft Queue ({{.Stats.DraftTotal}})</a>
+          <div class="bulk-primary-row">
+            <div class="bulk-select"><label class="checkline"><input id="select-all-apps" type="checkbox"> Select all visible</label><span id="selected-count" class="batch-note">0 selected</span></div>
+            <div class="bulk-actions">
+              <button class="btn ghost" type="submit" formaction="/app/applications/bulk/prepare">Prepare Selected</button>
+              <button class="btn ghost" type="submit" formaction="/app/applications/bulk/draft">Create Drafts</button>
+              <button class="btn ghost" type="submit" formaction="/app/applications/bulk/review">Review Selected</button>
+              <a class="btn ghost" href="/app/applications/review">Review Draft Queue ({{.Stats.DraftTotal}})</a>
+              <button class="btn primary" type="submit" formaction="/app/applications/send-confirm">Confirm Send</button>
+            </div>
+          </div>
+          <div class="bulk-hint">Use preparation and draft actions for repeatable work. Human review and final send stay separate so batch processing never bypasses approval.</div>
           {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for batch draft creation:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
         </div>
-        <div class="content-card"><div class="table-wrap"><table><thead><tr><th style="width:42px"></th><th>Job Title</th><th>Company</th><th>Method</th><th>Status</th><th>Preparation</th><th>Recipient</th><th>Updated</th></tr></thead><tbody>
-        {{range .Applications}}<tr><td><input class="row-check js-app-check" type="checkbox" name="job_id" value="{{.JobID}}"></td><td><a class="job-link" href="/app/applications/{{.JobID}}">{{.Title}}</a></td><td>{{.Company}}</td><td><span class="badge method-{{lower .Method}}">{{.Method}}</span></td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td>{{if .Prepared}}<span class="badge state-approved">PREPARED</span>{{else}}<span class="muted">Not prepared</span>{{end}}</td><td class="muted">{{.Recipient}}</td><td class="muted">{{.Updated}}</td></tr>{{end}}
-        </tbody></table></div>{{if not .Applications}}<div class="empty">No applications queued yet.</div>{{end}}</div>
+        <div class="content-card"><div class="table-wrap"><table><thead><tr><th style="width:42px"></th><th>Job</th><th>Company</th><th>Method</th><th>Status</th><th>Preparation</th><th>Recipient</th><th>Updated</th></tr></thead><tbody>
+        {{range .Applications}}<tr class="js-selectable-row"><td><input class="row-check js-app-check" type="checkbox" name="job_id" value="{{.JobID}}"></td><td class="table-title"><a class="job-link" href="/app/applications/{{.JobID}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td><span class="badge method-{{lower .Method}}">{{.Method}}</span></td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td>{{if .Prepared}}<span class="badge state-approved">PREPARED</span>{{else}}<span class="muted">Not prepared</span>{{end}}</td><td class="muted">{{.Recipient}}</td><td class="muted">{{.Updated}}</td></tr>{{end}}
+        </tbody></table></div>{{if not .Applications}}<div class="empty">No applications match the current filters.</div>{{end}}</div>
       </form>
     {{end}}
   {{end}}
 
   {{if eq .Active "cv-profiles"}}
     <section class="content-card"><div class="content-pad">
-      <div class="detail-title"><div><h2>CV Profiles</h2><p class="muted">Upload a new CV or use the same profile ID to replace/update an existing one.</p></div><span class="badge state-approved">{{len .CVProfiles}} PROFILES</span></div>
+      <div class="detail-title"><div><h2>Primary CV Library</h2><p class="muted">Upload a new CV or use the same profile ID to replace/update an existing one.</p></div><span class="badge state-approved">{{len .CVProfiles}} PROFILES</span></div>
       <form method="post" action="/app/cv-profiles/upload" enctype="multipart/form-data" class="upload-form">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <div class="form-grid">
@@ -1267,7 +1270,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   var form=document.getElementById('collect-form'), submit=document.getElementById('collect-submit');
   if(form&&submit){form.addEventListener('submit',function(){submit.disabled=true;submit.textContent='Collecting…';});}
   var selectAll=document.getElementById('select-all-apps'), appChecks=Array.prototype.slice.call(document.querySelectorAll('.js-app-check')), selectedCount=document.getElementById('selected-count');
-  function updateSelected(){var n=appChecks.filter(function(x){return x.checked}).length;if(selectedCount)selectedCount.textContent=n+' selected';if(selectAll){selectAll.checked=n>0&&n===appChecks.length;selectAll.indeterminate=n>0&&n<appChecks.length;}}
+  function updateSelected(){var n=appChecks.filter(function(x){return x.checked}).length;if(selectedCount)selectedCount.textContent=n+' selected';if(selectAll){selectAll.checked=n>0&&n===appChecks.length;selectAll.indeterminate=n>0&&n<appChecks.length;}appChecks.forEach(function(x){var row=x.closest('tr');if(row)row.classList.toggle('row-selected',x.checked);});}
   if(selectAll){selectAll.addEventListener('change',function(){appChecks.forEach(function(x){x.checked=selectAll.checked});updateSelected();});}
   appChecks.forEach(function(x){x.addEventListener('change',updateSelected)});updateSelected();
   var selectAllJobs=document.getElementById('select-all-jobs'), jobChecks=Array.prototype.slice.call(document.querySelectorAll('.js-job-check')), selectedJobsCount=document.getElementById('selected-jobs-count');
