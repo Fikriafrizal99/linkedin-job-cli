@@ -317,3 +317,71 @@ CREATE TABLE applications (
 		t.Fatalf("second migrateApplications: %v", err)
 	}
 }
+
+
+func TestMarkApplicationSentRequiresApproved(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-send-gate")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil {
+		t.Fatalf("SaveApplicationPreparation: %v", err)
+	}
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "draft-send"); err != nil {
+		t.Fatalf("MarkApplicationDraftCreated: %v", err)
+	}
+	if _, err := st.MarkApplicationSent(j.ID, "msg-1", "thread-1"); err == nil {
+		t.Fatal("expected DRAFT_CREATED send transition to be rejected")
+	}
+}
+
+func TestMarkApplicationSent(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-send")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil {
+		t.Fatalf("SaveApplicationPreparation: %v", err)
+	}
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "draft-send"); err != nil {
+		t.Fatalf("MarkApplicationDraftCreated: %v", err)
+	}
+	if _, err := st.ApproveApplication(j.ID, "reviewed"); err != nil {
+		t.Fatalf("ApproveApplication: %v", err)
+	}
+
+	got, err := st.MarkApplicationSent(j.ID, "msg-123", "thread-123")
+	if err != nil {
+		t.Fatalf("MarkApplicationSent: %v", err)
+	}
+	if got.State != models.ApplicationStateSent {
+		t.Fatalf("state=%q want SENT", got.State)
+	}
+	if got.GmailMessageID != "msg-123" || got.GmailThreadID != "thread-123" || got.SentAt == "" {
+		t.Fatalf("sent metadata missing: %+v", got)
+	}
+
+	again, err := st.MarkApplicationSent(j.ID, "msg-123", "thread-123")
+	if err != nil {
+		t.Fatalf("idempotent MarkApplicationSent: %v", err)
+	}
+	if again.GmailMessageID != "msg-123" {
+		t.Fatalf("unexpected sent record: %+v", again)
+	}
+
+	if _, err := st.MarkApplicationSent(j.ID, "other-msg", "thread-123"); err == nil {
+		t.Fatal("expected conflicting sent message id error")
+	}
+}
