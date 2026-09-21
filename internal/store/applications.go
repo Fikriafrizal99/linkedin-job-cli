@@ -107,6 +107,77 @@ WHERE job_id=?
 	return s.GetApplicationByJobID(jobID)
 }
 
+// MarkApplicationDraftCreated records the provider draft id and advances the
+// lifecycle only after an external Gmail draft creation succeeded.
+func (s *Store) MarkApplicationDraftCreated(jobID, draftID string) (*models.JobApplication, error) {
+	jobID = strings.TrimSpace(jobID)
+	draftID = strings.TrimSpace(draftID)
+	if jobID == "" {
+		return nil, fmt.Errorf("empty job id")
+	}
+	if draftID == "" {
+		return nil, fmt.Errorf("empty Gmail draft id")
+	}
+
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State == models.ApplicationStateSent {
+		return nil, fmt.Errorf("application for job %s is already SENT", jobID)
+	}
+	if existing.State == models.ApplicationStateDraftCreated {
+		if existing.GmailDraftID == draftID {
+			return existing, nil
+		}
+		return nil, fmt.Errorf("application for job %s already references Gmail draft %s", jobID, existing.GmailDraftID)
+	}
+	if existing.State != models.ApplicationStateReadyEmail {
+		return nil, fmt.Errorf("application state is %s; expected READY_EMAIL", existing.State)
+	}
+	if strings.TrimSpace(existing.Recipient) == "" ||
+		strings.TrimSpace(existing.Subject) == "" ||
+		strings.TrimSpace(existing.Body) == "" ||
+		strings.TrimSpace(existing.CVProfile) == "" {
+		return nil, fmt.Errorf("application is not fully prepared")
+	}
+
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications
+SET state=?, gmail_draft_id=?, draft_created_at=?, updated_at=?, last_error=''
+WHERE job_id=?
+`,
+		models.ApplicationStateDraftCreated, draftID, now, now, jobID); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(jobID)
+}
+
+// RecordApplicationDraftError stores a provider error without advancing state.
+func (s *Store) RecordApplicationDraftError(jobID, message string) (*models.JobApplication, error) {
+	existing, err := s.GetApplicationByJobID(strings.TrimSpace(jobID))
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State == models.ApplicationStateDraftCreated || existing.State == models.ApplicationStateSent {
+		return existing, nil
+	}
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications SET last_error=?, updated_at=? WHERE job_id=?
+`, strings.TrimSpace(message), now, strings.TrimSpace(jobID)); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(strings.TrimSpace(jobID))
+}
+
 func (s *Store) GetApplicationByJobID(jobID string) (*models.JobApplication, error) {
 	row := s.db.QueryRow(`
 SELECT id,job_id,state,COALESCE(recipient,''),COALESCE(subject,''),
