@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"sort"
@@ -40,6 +41,7 @@ type appCVProfile struct {
 	ID, FileName, Path, Keywords string
 	Priority int
 	Default bool
+	Exists bool
 }
 
 type appPageData struct {
@@ -51,6 +53,8 @@ type appPageData struct {
 	SelectedJob *models.JobPosting
 	SelectedApplication *models.JobApplication
 	SelectedApplicationJob *models.JobPosting
+	SelectedCVPath string
+	SelectedCVReady bool
 	CVProfiles []appCVProfile
 	DefaultCVProfile string
 	SettingsPath string
@@ -332,6 +336,10 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.ProfileSalary = fmt.Sprintf("%s %.0f", settings.Profile.MinSalaryCurrency, *settings.Profile.MinSalary)
 		}
 		for _, p := range settings.Application.CVProfiles {
+			exists := false
+			if info, err := os.Stat(strings.TrimSpace(p.Path)); err == nil && !info.IsDir() {
+				exists = true
+			}
 			pd.CVProfiles = append(pd.CVProfiles, appCVProfile{
 				ID: p.ID,
 				FileName: filepath.Base(p.Path),
@@ -339,6 +347,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				Keywords: strings.Join(p.Keywords, ", "),
 				Priority: p.Priority,
 				Default: strings.EqualFold(p.ID, settings.Application.DefaultCVProfile),
+				Exists: exists,
 			})
 		}
 	} else {
@@ -461,6 +470,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		pd.SelectedApplication = preferredApplication(apps)
 		if pd.SelectedApplication != nil {
 			pd.SelectedApplicationJob = jobByID[pd.SelectedApplication.JobID]
+			pd.SelectedCVPath, pd.SelectedCVReady = selectedCVStatus(settings.Application.CVProfiles, pd.SelectedApplication.CVProfile)
 		}
 	case "jobs":
 		pd.Active, pd.Title, pd.Subtitle = "jobs", "Jobs", "View, search, and manage all collected job listings."
@@ -505,6 +515,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			if a == nil { return pd, fmt.Errorf("application %s not found", parts[1]) }
 			pd.SelectedApplication = a
 			pd.SelectedApplicationJob = jobByID[a.JobID]
+			pd.SelectedCVPath, pd.SelectedCVReady = selectedCVStatus(settings.Application.CVProfiles, a.CVProfile)
 		}
 	case "cv-profiles":
 		pd.Active, pd.Title, pd.Subtitle = "cv-profiles", "CV Profiles", "Manage CV profiles used by deterministic application preparation."
@@ -516,6 +527,25 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		return pd, fmt.Errorf("unknown UI page %q", section)
 	}
 	return pd, nil
+}
+
+func selectedCVStatus(profiles []config.CVProfileSettings, profileID string) (string, bool) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return "", false
+	}
+	for _, p := range profiles {
+		if !strings.EqualFold(strings.TrimSpace(p.ID), profileID) {
+			continue
+		}
+		path := strings.TrimSpace(p.Path)
+		if path == "" {
+			return "", false
+		}
+		info, err := os.Stat(path)
+		return path, err == nil && !info.IsDir()
+	}
+	return "", false
 }
 
 func matchesUIJob(j *models.JobPosting, state, q, location, method, appState string) bool {
@@ -758,7 +788,10 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
             <div class="detail-actions"><button class="btn ghost" type="submit">{{if .SelectedApplication.Subject}}Re-prepare Application{{else}}Prepare Application{{end}}</button></div>
           </form>
           {{if and .SelectedApplication.Subject .SelectedApplication.Body .SelectedApplication.CVProfile}}
-            {{if .GmailConnected}}
+            <div class="field-label">CV Attachment</div><div class="field">{{if .SelectedCVPath}}{{.SelectedCVPath}}{{else}}No configured file path{{end}}</div>
+            {{if not .SelectedCVReady}}
+              <div class="alert" style="margin-top:12px">The selected CV file is not accessible. Update the CV profile path before creating a Gmail draft.</div>
+            {{else if .GmailConnected}}
               <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/draft" style="margin-top:10px">
                 <input type="hidden" name="csrf" value="{{.CSRF}}">
                 <button class="btn primary" type="submit" style="width:100%">Create Gmail Draft</button>
@@ -803,7 +836,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 
   {{if eq .Active "cv-profiles"}}
     <div class="two-col">
-      <section>{{if .CVProfiles}}<div class="cv-grid">{{range .CVProfiles}}<article class="cv-card">{{if .Default}}<span class="cv-default">Default</span>{{end}}<h3>{{.ID}}</h3><div class="cv-path">{{.FileName}}</div><p>{{.Path}}</p><div class="field-label">Keywords</div><p>{{if .Keywords}}{{.Keywords}}{{else}}No keyword rules configured.{{end}}</p><div class="field-label">Priority</div><p>{{.Priority}}</p><button class="btn ghost" disabled>Edit</button></article>{{end}}</div>{{else}}<div class="content-card"><div class="empty">No CV profiles configured in settings.yaml.</div></div>{{end}}</section>
+      <section>{{if .CVProfiles}}<div class="cv-grid">{{range .CVProfiles}}<article class="cv-card">{{if .Default}}<span class="cv-default">Default</span>{{end}}<h3>{{.ID}}</h3><div class="cv-path">{{.FileName}}</div><p>{{.Path}}</p>{{if .Exists}}<span class="badge state-approved">FILE READY</span>{{else}}<span class="badge state-need_review">FILE MISSING</span>{{end}}<div class="field-label">Keywords</div><p>{{if .Keywords}}{{.Keywords}}{{else}}No keyword rules configured.{{end}}</p><div class="field-label">Priority</div><p>{{.Priority}}</p><button class="btn ghost" disabled>Edit</button></article>{{end}}</div>{{else}}<div class="content-card"><div class="empty">No CV profiles configured in settings.yaml.</div></div>{{end}}</section>
       <aside class="content-card"><div class="content-pad"><h2>Selection Rules</h2><p class="muted">CV selection is deterministic and uses the configuration already implemented in the application engine.</p><div class="info-row"><span>Configured profiles</span><b>{{len .CVProfiles}}</b></div><div class="info-row"><span>Default profile</span><b>{{.DefaultCVProfile}}</b></div><div class="info-row"><span>Title keyword weight</span><b>+5</b></div><div class="info-row"><span>Description keyword weight</span><b>+1</b></div><div class="info-row"><span>Tie breaker</span><b>Priority</b></div><div class="footer-note">Profile editing remains configuration-backed; this phase does not invent settings that are not persisted yet.</div></div></aside>
     </div>
   {{end}}
