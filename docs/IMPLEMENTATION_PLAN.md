@@ -199,6 +199,10 @@ Safety rules:
 
 The bridge is implemented; live sending remains user-authorized per application.
 
+### P3.6 — Follow-up Tracking
+
+Intentionally not implemented. The Application Engine stops at explicit send and provider-result persistence. Reminder, follow-up email, and response-tracking automation are out of scope.
+
 ## Explicitly Deferred
 
 These remain outside Collector V1 unless explicitly approved:
