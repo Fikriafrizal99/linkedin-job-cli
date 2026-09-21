@@ -962,7 +962,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
     <section class="grid-kpi">
       <div class="kpi"><div class="kpi-icon amber">J</div><div><div class="value">{{.Stats.JobsTotal}}</div><div class="label">Jobs Collected</div><div class="hint">Stored in SQLite</div></div></div>
       <div class="kpi"><div class="kpi-icon cyan">@</div><div><div class="value">{{.Stats.EmailTotal}}</div><div class="label">With Email Contact</div><div class="hint">Explicit application emails</div></div></div>
-      <div class="kpi"><div class="kpi-icon purple">A</div><div><div class="value">{{.Stats.PipelineTotal}}</div><div class="label">In Application Pipeline</div><div class="hint">{{.Stats.ReadyTotal}} ready · {{.Stats.NeedReviewTotal}} review · {{.Stats.DraftTotal}} draft · {{.Stats.ApprovedTotal}} approved</div></div></div>
+      <div class="kpi"><div class="kpi-icon purple">A</div><div><div class="value">{{.Stats.PipelineTotal}}</div><div class="label">In Application Pipeline</div><div class="hint">{{.Stats.ReadyTotal}} email ready · {{.Stats.EasyReadyTotal}} easy apply · {{.Stats.DraftTotal}} drafts · {{.Stats.AppliedTotal}} applied</div></div></div>
       <div class="kpi"><div class="kpi-icon green">✓</div><div><div class="value">{{.Stats.SentTotal}}</div><div class="label">Applications Sent</div><div class="hint good">Explicit sends only</div></div></div>
     </section>
     <section class="dashboard-grid">
@@ -995,21 +995,21 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <div class="content-card"><div class="content-pad"><div class="detail-title"><div><h2>{{.SelectedJob.Title}}</h2><div class="company">{{.SelectedJob.Company}}</div></div><a class="btn primary" target="_blank" rel="noreferrer" href="{{.SelectedJob.URL}}">Open in LinkedIn ↗</a></div>
           <div class="tabs"><span class="tab active">Overview</span><span class="tab">Description</span><span class="tab">Company</span><span class="tab">Application</span></div>
           <div class="detail-grid">
-            <div class="info-card"><h3>Job Information</h3><div class="info-row"><span>Location</span><b>{{.SelectedJob.Location}}</b></div><div class="info-row"><span>Method</span><b>{{.SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Contact</span><b>{{.SelectedJob.ApplyEmail}}</b></div><div class="info-row"><span>Posted</span><b>{{.SelectedJob.PostedAt}}</b></div></div>
+            <div class="info-card"><h3>Job Information</h3><div class="info-row"><span>Location</span><b>{{.SelectedJob.Location}}</b></div><div class="info-row"><span>Method</span><b>{{methodLabel .SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Contact</span><b>{{.SelectedJob.ApplyEmail}}</b></div><div class="info-row"><span>Posted</span><b>{{.SelectedJob.PostedAt}}</b></div></div>
             <div class="info-card"><h3>Collection Metadata</h3><div class="info-row"><span>LinkedIn ID</span><b>{{.SelectedJob.ID}}</b></div><div class="info-row"><span>Source</span><b>{{.SelectedJob.Source}}</b></div><div class="info-row"><span>Status</span><b>{{.SelectedJob.Status}}</b></div><div class="info-row"><span>Detail status</span><b>{{.SelectedJob.DetailStatus}}</b></div></div>
           </div>
           <div class="field-label">Description</div><div class="field email-body">{{if .SelectedJob.ShortDescription}}{{.SelectedJob.ShortDescription}}{{else}}{{.SelectedJob.Description}}{{end}}</div>
         </div></div>
-        <aside class="content-card"><div class="content-pad"><h3>Application</h3><p class="muted">Explicit data extracted from the posting.</p><div class="info-row"><span>Method</span><b>{{.SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Email</span><b>{{if .SelectedJob.ApplyEmail}}{{.SelectedJob.ApplyEmail}}{{else}}—{{end}}</b></div>
+        <aside class="content-card"><div class="content-pad"><h3>Application</h3><p class="muted">Explicit data extracted from the posting.</p><div class="info-row"><span>Method</span><b>{{methodLabel .SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Email</span><b>{{if .SelectedJob.ApplyEmail}}{{.SelectedJob.ApplyEmail}}{{else}}—{{end}}</b></div>
         {{if .SelectedApplication}}
           <div class="info-row"><span>Pipeline State</span><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
           <a class="btn primary" style="display:block;text-align:center;margin-top:12px" href="/app/applications/{{.SelectedJob.ID}}">View Application</a>
         {{else}}
-          <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/queue" style="margin-top:12px" {{if not (and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail)}}onsubmit="return confirm('This job has no explicit application email. Queue it as NEED_REVIEW anyway?')"{{end}}>
+          <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/queue" style="margin-top:12px" {{if and (not (and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail)) (not (easyApplyMethod .SelectedJob.ApplicationMethod))}}onsubmit="return confirm('This job has no supported email or Easy Apply path. Queue it as NEED_REVIEW anyway?')"{{end}}>
             <input type="hidden" name="csrf" value="{{.CSRF}}">
-            <button class="btn primary" type="submit" style="width:100%">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}Queue Application{{else}}Queue as NEED_REVIEW{{end}}</button>
+            <button class="btn primary" type="submit" style="width:100%">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}Queue Email Application{{else if easyApplyMethod .SelectedJob.ApplicationMethod}}Queue Easy Apply{{else}}Queue as NEED_REVIEW{{end}}</button>
           </form>
-          <div class="footer-note">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}This job will enter READY_EMAIL.{{else}}No explicit email detected. This is an optional manual-review path and requires confirmation.{{end}}</div>
+          <div class="footer-note">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}This job will enter READY_EMAIL.{{else if easyApplyMethod .SelectedJob.ApplicationMethod}}This job will enter READY_EASY_APPLY. Submission remains manual on LinkedIn.{{else}}No supported application destination was detected. NEED_REVIEW is an optional manual path.{{end}}</div>
         {{end}}
         {{if .SelectedJob.ApplyURL}}<a class="btn ghost" style="display:block;text-align:center;margin-top:8px" target="_blank" rel="noreferrer" href="{{.SelectedJob.ApplyURL}}">Open Apply URL ↗</a>{{end}}</div></aside>
       </section>
@@ -1036,18 +1036,18 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
             </div>
             <div class="bulk-actions">
               <button class="btn ghost" id="queue-selected-jobs" type="submit" formaction="/app/jobs/bulk/queue">Queue Selected</button>
-              <button class="btn primary" id="process-selected-jobs" data-gmail="{{if .GmailConnected}}1{{else}}0{{end}}" type="submit" formaction="/app/jobs/bulk/process-to-draft" {{if not .GmailConnected}}disabled title="Connect Gmail first"{{end}}>Process Selected to Draft</button>
+              <button class="btn primary" id="process-selected-jobs" type="submit" formaction="/app/jobs/bulk/process-to-draft">Process Selected</button>
             </div>
           </div>
-          <div class="bulk-hint">By default, jobs without an explicit application email are skipped and stay only in the Jobs database. Process Selected to Draft always skips them.</div>
-          <label class="checkline" style="margin:0"><input type="checkbox" name="include_need_review" value="1"> Include jobs without email as NEED_REVIEW when using Queue Selected</label>
-          <div class="bulk-hint">Queue Selected supports up to 50 jobs. Process Selected to Draft supports up to 25 and runs Queue → deterministic Prepare → Gmail Draft → Review Queue. Neither action approves or sends email.</div>
-          {{if not .GmailConnected}}<div class="bulk-hint">Gmail is not connected, so Process Selected to Draft is disabled. Queue Selected remains available.</div>{{end}}
+          <div class="bulk-hint">Supported jobs are routed automatically: EMAIL → Gmail Draft Review, EASY_APPLY → manual LinkedIn Easy Apply Queue. UNKNOWN / unsupported destinations are skipped by default.</div>
+          <label class="checkline" style="margin:0"><input type="checkbox" name="include_need_review" value="1"> Include unsupported jobs as NEED_REVIEW when using Queue Selected</label>
+          <div class="bulk-hint">Queue Selected supports up to 50 jobs. Process Selected supports up to 25. Easy Apply never auto-submits; email still requires Gmail for draft creation.</div>
+          {{if not .GmailConnected}}<div class="bulk-hint">Gmail is not connected: Easy Apply jobs can still be processed, while EMAIL jobs will report a Gmail configuration error.</div>{{end}}
           {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for created drafts:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
         </div>
 
         <div class="content-card"><div class="table-wrap"><table class="jobs-table"><thead><tr><th style="width:42px"></th><th>Job</th><th>Company</th><th>Location</th><th>Apply</th><th>Status</th><th>Added</th></tr></thead><tbody>
-        {{range .Jobs}}<tr class="js-selectable-row"><td><input class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"></td><td class="table-title"><a class="job-link" href="/app/jobs/{{.ID}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{.Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else}}<small>No explicit email · skipped by default</small>{{end}}</td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
+        {{range .Jobs}}<tr class="js-selectable-row"><td><input class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"></td><td class="table-title"><a class="job-link" href="/app/jobs/{{.ID}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{.Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else if eq .Method "EASY_APPLY"}}<small>LinkedIn form · manual submission</small>{{else}}<small>Unsupported destination · skipped by default</small>{{end}}</td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
         </tbody></table></div>{{if not .Jobs}}<div class="empty">No jobs match the current filters.</div>{{end}}</div>
       </form>
     {{end}}
