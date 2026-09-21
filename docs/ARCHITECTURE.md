@@ -538,3 +538,5 @@ The collector remains the source of job metadata such as `apply_email` and `appl
 CV selection is deterministic and configuration-driven. Profiles live under `application.cv_profiles` in `settings.yaml`; title keyword matches receive higher weight than description matches, with `default_cv_profile` as fallback. Preparing an application does not advance it past `READY_EMAIL` and never sends email.
 
 Manual review is an explicit state transition: only a persisted Gmail draft may advance from `DRAFT_CREATED` to `APPROVED`. Approval stores a review timestamp and optional note. The future send stage must require `APPROVED`; creating a draft alone is never sufficient authorization to send.
+
+The explicit-send bridge validates `APPROVED` state and exposes only the persisted Gmail draft id. Provider-side `send_draft` remains a separate user-authorized action. After a successful send, provider message/thread ids are stored before the lifecycle is considered `SENT`; this makes send recording idempotent and gives follow-up tracking a stable Gmail reference.
