@@ -938,7 +938,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         </div>
 
         <div class="content-card"><div class="table-wrap"><table class="jobs-table"><thead><tr><th style="width:42px"></th><th>Job</th><th>Company</th><th>Location</th><th>Apply</th><th>Status</th><th>Added</th></tr></thead><tbody>
-        {{range .Jobs}}<tr class="js-selectable-row"><td><input class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"></td><td class="table-title"><a class="job-link" href="/app/jobs/{{.ID}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{.Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else}}<small>No explicit email · will need review</small>{{end}}</td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
+        {{range .Jobs}}<tr class="js-selectable-row"><td><input class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"></td><td class="table-title"><a class="job-link" href="/app/jobs/{{.ID}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{.Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else}}<small>No explicit email · skipped by default</small>{{end}}</td><td><span class="badge state-{{lower .State}}">{{.State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
         </tbody></table></div>{{if not .Jobs}}<div class="empty">No jobs match the current filters.</div>{{end}}</div>
       </form>
     {{end}}
