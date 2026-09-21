@@ -39,12 +39,13 @@ var logoPNG []byte
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Serve the local Job Command Center web UI",
-	Long: `Starts a local web server that lists every stored job with all fields
-visible. Long-text fields (description, summaries, company overview, fit reason,
-notes) are collapsed by default and expand on click. Each job title links out to
-its LinkedIn posting. Supports full-text search, filters, and sorting.
+	Long: `Starts the local LinkedIn Job CLI command-center UI.
 
-Read-only — no data is written. Binds to localhost only.`,
+The default experience is the unified application UI under /app/ with Dashboard,
+Jobs, Applications, CV Profiles, Collect Jobs, and Settings. The previous jobs
+browser remains available at /legacy while the new UI is wired incrementally.
+
+Binds to localhost only by default.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		st, err := openStore()
 		if err != nil {
