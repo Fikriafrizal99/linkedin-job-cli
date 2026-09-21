@@ -181,3 +181,26 @@ func TestApplicationDetailRendersOptionalAttachmentPicker(t *testing.T) {
 		t.Fatalf("attachment picker missing")
 	}
 }
+
+
+func TestFriendlyAttachmentNameAndDraftBody(t *testing.T) {
+	got := friendlyAttachmentName(
+		"Mochamad Fikri Afrizal",
+		"Professional Portfolio 2026",
+		"/tmp/portfolio-123456.pdf",
+	)
+	if got != "Mochamad_Fikri_Afrizal_Professional_Portfolio_2026.pdf" {
+		t.Fatalf("friendly name=%q", got)
+	}
+
+	body := "Dear Hiring Team,\n\nPlease find my CV attached for your review.\n\nKind regards,"
+	withPortfolio := draftBodyForAttachments(body, []resolvedAttachment{{Kind: "portfolio"}})
+	if !strings.Contains(withPortfolio, "Please find my CV and portfolio attached for your review.") {
+		t.Fatalf("portfolio body=%q", withPortfolio)
+	}
+
+	withSeveral := draftBodyForAttachments(body, []resolvedAttachment{{Kind: "portfolio"}, {Kind: "certificate"}})
+	if !strings.Contains(withSeveral, "Please find my CV and supporting documents attached for your review.") {
+		t.Fatalf("multi attachment body=%q", withSeveral)
+	}
+}
