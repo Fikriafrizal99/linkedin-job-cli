@@ -23,10 +23,13 @@ type appStats struct {
 	EmailTotal     int
 	PipelineTotal  int
 	SentTotal      int
-	ReadyTotal     int
-	NeedReviewTotal int
-	DraftTotal     int
-	ApprovedTotal  int
+	ReadyTotal       int
+	EasyReadyTotal   int
+	InProgressTotal  int
+	AppliedTotal     int
+	NeedReviewTotal  int
+	DraftTotal       int
+	ApprovedTotal    int
 }
 
 type appJobRow struct {
@@ -96,6 +99,18 @@ type appPageData struct {
 	ReviewStayURL string
 	SendConfirmMode bool
 	SendCandidates []appSendCandidate
+	EasyApplyMode bool
+	EasyApplyPosition int
+	EasyApplyTotal int
+	EasyApplyPrevURL string
+	EasyApplyNextURL string
+	EasyApplyStayURL string
+	EasyApplyCurrentURL string
+	EasyApplyRecommendedCV string
+	EasyApplyRecommendedCVPath string
+	EasyApplyRecommendedCVReady bool
+	EasyApplyOpenTargets []easyApplyOpenTarget
+	EasyApplyBatchURL string
 	Error string
 }
 
@@ -103,6 +118,8 @@ func newAppTemplate() (*template.Template, error) {
 	return template.New("app").Funcs(template.FuncMap{
 		"lower": strings.ToLower,
 		"base": filepath.Base,
+		"methodLabel": applicationMethodLabel,
+		"easyApplyMethod": isEasyApplyMethod,
 	}).Parse(appHTML)
 }
 
@@ -418,23 +435,28 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.ActionMessage += " New Draft ID: " + draftID + "."
 		}
 	}
+	if r.URL.Query().Get("easy_applied") == "1" {
+		pd.ActionMessage = "Easy Apply marked APPLIED after manual LinkedIn submission."
+	}
 	if action := strings.TrimSpace(r.URL.Query().Get("job_bulk")); action != "" || r.URL.Query().Get("job_process") == "1" {
 		selected, _ := strconv.Atoi(r.URL.Query().Get("selected"))
 		queued, _ := strconv.Atoi(r.URL.Query().Get("queued_count"))
 		prepared, _ := strconv.Atoi(r.URL.Query().Get("prepared_count"))
 		drafts, _ := strconv.Atoi(r.URL.Query().Get("draft_count"))
 		existingDrafts, _ := strconv.Atoi(r.URL.Query().Get("existing_draft_count"))
+		easyQueued, _ := strconv.Atoi(r.URL.Query().Get("easy_apply_queued_count"))
+		easyExisting, _ := strconv.Atoi(r.URL.Query().Get("easy_apply_existing_count"))
 		needReview, _ := strconv.Atoi(r.URL.Query().Get("need_review_count"))
 		nonEmailSkipped, _ := strconv.Atoi(r.URL.Query().Get("non_email_skipped_count"))
 		skipped, _ := strconv.Atoi(r.URL.Query().Get("skipped_count"))
 		failed, _ := strconv.Atoi(r.URL.Query().Get("failed_count"))
 		switch {
 		case r.URL.Query().Get("job_process") == "1":
-			pd.ActionMessage = fmt.Sprintf("Process to Draft finished: %d selected · %d queued · %d prepared · %d new drafts · %d existing drafts in review · %d non-email skipped · %d existing need review · %d skipped · %d failed.", selected, queued, prepared, drafts, existingDrafts, nonEmailSkipped, needReview, skipped, failed)
+			pd.ActionMessage = fmt.Sprintf("Process Selected finished: %d selected · %d queued · %d prepared · %d new email drafts · %d existing email drafts · %d new Easy Apply · %d existing Easy Apply · %d unsupported skipped · %d need review · %d skipped · %d failed.", selected, queued, prepared, drafts, existingDrafts, easyQueued, easyExisting, nonEmailSkipped, needReview, skipped, failed)
 		case action == "queue":
-			pd.ActionMessage = fmt.Sprintf("Bulk queue finished: %d selected · %d queued · %d non-email skipped · %d need review · %d existing/skipped · %d failed.", selected, queued, nonEmailSkipped, needReview, skipped, failed)
+			pd.ActionMessage = fmt.Sprintf("Bulk queue finished: %d selected · %d queued · %d Easy Apply · %d unsupported skipped · %d need review · %d existing/skipped · %d failed.", selected, queued, easyQueued, nonEmailSkipped, needReview, skipped, failed)
 		case action == "process":
-			pd.ActionMessage = fmt.Sprintf("Process to Draft finished: %d selected · %d queued · %d prepared · %d drafts · %d non-email skipped · %d existing need review · %d skipped · %d failed.", selected, queued, prepared, drafts, nonEmailSkipped, needReview, skipped, failed)
+			pd.ActionMessage = fmt.Sprintf("Process Selected finished: %d selected · %d queued · %d prepared · %d email drafts · %d Easy Apply · %d unsupported skipped · %d need review · %d skipped · %d failed.", selected, queued, prepared, drafts, easyQueued+easyExisting, nonEmailSkipped, needReview, skipped, failed)
 		}
 	}
 	if processErr := strings.TrimSpace(r.URL.Query().Get("job_process_error")); processErr != "" {
@@ -497,13 +519,13 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	methodSet := map[string]bool{}
 	for _, j := range jobs {
 		if v := strings.TrimSpace(j.Location); v != "" { locationSet[v] = true }
-		if v := strings.TrimSpace(j.ApplicationMethod); v != "" { methodSet[v] = true }
+		if v := applicationMethodLabel(j.ApplicationMethod); v != "" { methodSet[v] = true }
 	}
 	for v := range locationSet { pd.Locations = append(pd.Locations, v) }
 	for v := range methodSet { pd.Methods = append(pd.Methods, v) }
 	sort.Strings(pd.Locations)
 	sort.Strings(pd.Methods)
-	pd.States = []string{"NOT_APPLIED", models.ApplicationStateReadyEmail, models.ApplicationStateNeedReview, models.ApplicationStateDraftCreated, models.ApplicationStateApproved, models.ApplicationStateSent}
+	pd.States = []string{"NOT_APPLIED", models.ApplicationStateReadyEmail, models.ApplicationStateReadyEasyApply, models.ApplicationStateInProgress, models.ApplicationStateNeedReview, models.ApplicationStateDraftCreated, models.ApplicationStateApproved, models.ApplicationStateApplied, models.ApplicationStateSent}
 
 	jobByID := map[string]*models.JobPosting{}
 	for _, j := range jobs {
@@ -512,12 +534,22 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.Stats.EmailTotal++
 		}
 	}
+	appByJobID := map[string]*models.JobApplication{}
+	for i := range apps {
+		appByJobID[apps[i].JobID] = &apps[i]
+	}
 	pd.Stats.JobsTotal = len(jobs)
 	pd.Stats.PipelineTotal = len(apps)
 	for _, a := range apps {
 		switch a.State {
 		case models.ApplicationStateReadyEmail:
 			pd.Stats.ReadyTotal++
+		case models.ApplicationStateReadyEasyApply:
+			pd.Stats.EasyReadyTotal++
+		case models.ApplicationStateInProgress:
+			pd.Stats.InProgressTotal++
+		case models.ApplicationStateApplied:
+			pd.Stats.AppliedTotal++
 		case models.ApplicationStateNeedReview:
 			pd.Stats.NeedReviewTotal++
 		case models.ApplicationStateDraftCreated:
@@ -583,13 +615,78 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				Prepared: strings.TrimSpace(a.Subject) != "" && strings.TrimSpace(a.Body) != "" && strings.TrimSpace(a.CVProfile) != "",
 			}
 			if j != nil {
-				row.Title, row.Company, row.Method = j.Title, j.Company, j.ApplicationMethod
+				row.Title, row.Company, row.Method = j.Title, j.Company, applicationMethodLabel(j.ApplicationMethod)
 			}
 			pd.Applications = append(pd.Applications, row)
 		}
-		if len(parts) > 1 && parts[1] == "review" {
+		if len(parts) > 1 && parts[1] == "easy-apply" {
+			pd.Title, pd.Subtitle = "Easy Apply Queue", "Open LinkedIn applications in controlled batches, submit manually, then confirm each completed application."
+			pd.EasyApplyMode = true
+			queue := easyApplyQueueIDs(apps, r.URL.Query().Get("ids"))
+			pd.EasyApplyTotal = len(queue)
+			if len(queue) > 0 {
+				pos := 0
+				if raw := strings.TrimSpace(r.URL.Query().Get("pos")); raw != "" {
+					if n, convErr := strconv.Atoi(raw); convErr == nil {
+						pos = n
+					}
+				}
+				if pos < 0 { pos = 0 }
+				if pos >= len(queue) { pos = len(queue)-1 }
+				pd.EasyApplyPosition = pos + 1
+				currentID := queue[pos]
+				a, getErr := ws.st.GetApplicationByJobID(currentID)
+				if getErr != nil { return pd, getErr }
+				pd.SelectedApplication = a
+				if a != nil {
+					pd.SelectedApplicationJob = jobByID[a.JobID]
+					if safeURL, urlErr := safeLinkedInApplyURL(a.ApplyURL); urlErr == nil {
+						pd.EasyApplyCurrentURL = safeURL
+					}
+					if pd.SelectedApplicationJob != nil {
+						profile, profileErr := appengine.SelectCVProfile(pd.SelectedApplicationJob, settings.Application, a.CVProfile)
+						if profileErr == nil && profile != nil {
+							pd.EasyApplyRecommendedCV = profile.ID
+							pd.EasyApplyRecommendedCVPath = profile.Path
+							if info, statErr := os.Stat(strings.TrimSpace(profile.Path)); statErr == nil && !info.IsDir() {
+								pd.EasyApplyRecommendedCVReady = true
+							}
+						}
+					}
+				}
+				pd.EasyApplyPrevURL = easyApplyQueueURL(queue, pos-1)
+				pd.EasyApplyNextURL = easyApplyQueueURL(queue, pos+1)
+				pd.EasyApplyStayURL = easyApplyQueueURL(queue, pos)
+				for idx := pos; idx < len(queue) && idx < pos+3; idx++ {
+					id := queue[idx]
+					app := appByJobID[id]
+					job := jobByID[id]
+					if app == nil || job == nil {
+						continue
+					}
+					safeURL, urlErr := safeLinkedInApplyURL(app.ApplyURL)
+					if urlErr != nil {
+						continue
+					}
+					pd.EasyApplyOpenTargets = append(pd.EasyApplyOpenTargets, easyApplyOpenTarget{
+						JobID: id, Title: job.Title, Company: job.Company, URL: safeURL,
+						MarkURL: "/app/applications/" + url.PathEscape(id) + "/easy-apply/open",
+					})
+				}
+			}
+		} else if len(parts) > 1 && parts[1] == "review" {
 			pd.Title, pd.Subtitle = "Review Queue", "Review prepared Gmail drafts one by one, approve the good ones, and keep moving without reopening each record."
 			pd.ReviewMode = true
+			if rawEasy := strings.TrimSpace(r.URL.Query().Get("easy_ids")); rawEasy != "" {
+				ids := []string{}
+				for _, id := range strings.Split(rawEasy, ",") {
+					id = strings.TrimSpace(id)
+					if id != "" { ids = append(ids, id) }
+				}
+				if len(ids) > 0 {
+					pd.EasyApplyBatchURL = easyApplyQueueURL(ids, 0)
+				}
+			}
 			queue := reviewQueueIDs(apps, r.URL.Query().Get("ids"))
 			pd.ReviewTotal = len(queue)
 			if len(queue) > 0 {
@@ -701,7 +798,7 @@ func matchesUIJob(j *models.JobPosting, state, q, location, method, appState str
 		if !strings.Contains(blob, strings.ToLower(q)) { return false }
 	}
 	if location != "" && !strings.EqualFold(strings.TrimSpace(j.Location), location) { return false }
-	if method != "" && !strings.EqualFold(strings.TrimSpace(j.ApplicationMethod), method) { return false }
+	if method != "" && !strings.EqualFold(applicationMethodLabel(j.ApplicationMethod), method) { return false }
 	if appState != "" && !strings.EqualFold(state, appState) { return false }
 	return true
 }
@@ -711,7 +808,7 @@ func matchesUIApplication(a *models.JobApplication, j *models.JobPosting, q, met
 	if state != "" && !strings.EqualFold(a.State, state) { return false }
 	if method != "" {
 		jobMethod := ""
-		if j != nil { jobMethod = j.ApplicationMethod }
+		if j != nil { jobMethod = applicationMethodLabel(j.ApplicationMethod) }
 		if !strings.EqualFold(strings.TrimSpace(jobMethod), method) { return false }
 	}
 	if q != "" {
@@ -753,9 +850,21 @@ func uiJobRow(j *models.JobPosting, state string) appJobRow {
 	if added == "" { added = j.PostedAt }
 	return appJobRow{
 		ID: j.ID, Title: j.Title, Company: j.Company, Location: j.Location,
-		Method: nonEmpty(j.ApplicationMethod, "UNKNOWN"), State: state,
+		Method: applicationMethodLabel(j.ApplicationMethod), State: state,
 		Added: displayDate(added), URL: j.URL, Email: j.ApplyEmail,
 	}
+}
+
+func isEasyApplyMethod(method string) bool {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	return method == "LINKEDIN" || method == "EASY_APPLY"
+}
+
+func applicationMethodLabel(method string) string {
+	if isEasyApplyMethod(method) {
+		return "EASY_APPLY"
+	}
+	return nonEmpty(strings.ToUpper(strings.TrimSpace(method)), "UNKNOWN")
 }
 
 func nonEmpty(v, fallback string) string {
