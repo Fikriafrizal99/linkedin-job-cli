@@ -401,6 +401,12 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.ActionMessage += " Draft ID: " + draftID + "."
 		}
 	}
+	switch r.URL.Query().Get("review") {
+	case "approved":
+		pd.ActionMessage = "Application approved after manual Gmail draft review. No email was sent."
+	case "unapproved":
+		pd.ActionMessage = "Approval removed. The Gmail draft is back in manual review and no email was sent."
+	}
 	if fileErr := strings.TrimSpace(r.URL.Query().Get("file_error")); fileErr != "" {
 		pd.ActionError = fileErr
 	}
@@ -826,10 +832,33 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
           <div class="alert" style="margin-top:16px">Recipient/email is not confirmed. Resolve the application contact before preparing this record.</div>
         {{else if eq .SelectedApplication.State "DRAFT_CREATED"}}
           <div class="alert success" style="margin-top:16px">Gmail draft is created and ready for manual review.</div>
-          <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a><button class="btn primary" disabled>Approve (next phase)</button></div>
-          <div class="footer-note">No email has been sent. Approval remains a separate explicit action.</div>
+          <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a></div>
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/approve" style="margin-top:14px">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <div class="form-group"><label>Review Note <span class="muted">(optional)</span></label><textarea name="review_note" maxlength="500" rows="3" placeholder="e.g. Recipient, subject, body, CV and portfolio checked in Gmail."></textarea></div>
+            <label class="checkline"><input type="checkbox" name="review_confirm" value="1" required> I reviewed the Gmail draft, recipient, email content, and attachments.</label>
+            <div class="detail-actions"><button class="btn primary" type="submit">Approve Application</button></div>
+          </form>
+          <div class="footer-note">Approval only changes the local lifecycle to APPROVED. It does not send the email.</div>
+        {{else if eq .SelectedApplication.State "APPROVED"}}
+          <div class="alert success" style="margin-top:16px">Application is approved for a separate explicit send action. No email has been sent by approval.</div>
+          <div class="detail-grid" style="margin-top:14px">
+            <div class="info-card"><h3>Manual Review</h3><div class="info-row"><span>Reviewed at</span><b>{{.SelectedApplication.ReviewedAt}}</b></div><div class="info-row"><span>Review note</span><b>{{if .SelectedApplication.ReviewNote}}{{.SelectedApplication.ReviewNote}}{{else}}—{{end}}</b></div></div>
+            <div class="info-card"><h3>Send Gate</h3><div class="info-row"><span>Status</span><b>APPROVED</b></div><div class="info-row"><span>Email sent</span><b>No</b></div></div>
+          </div>
+          <div class="detail-actions"><a class="btn ghost" target="_blank" rel="noreferrer" href="https://mail.google.com/mail/u/0/#drafts">Open Gmail Drafts ↗</a><button class="btn primary" disabled>Send (separate phase)</button></div>
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/unapprove" style="margin-top:14px" onsubmit="return confirm('Return this application to DRAFT_CREATED for more review?')">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <div class="form-group"><label>Reason for reopening <span class="muted">(optional)</span></label><textarea name="review_note" maxlength="500" rows="2" placeholder="e.g. Need to revise the Gmail draft before sending."></textarea></div>
+            <div class="detail-actions"><button class="btn ghost" type="submit">Unapprove &amp; Reopen Review</button></div>
+          </form>
+          <div class="footer-note">Unapprove keeps the existing Gmail draft and returns the local state to DRAFT_CREATED.</div>
+        {{else if eq .SelectedApplication.State "SENT"}}
+          <div class="alert success" style="margin-top:16px">Application is recorded as SENT.</div>
+          <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button></div>
+          <div class="footer-note">Sent applications are locked from preparation and review state changes.</div>
         {{else}}
-          <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button><button class="btn ghost" disabled>Unapprove</button><button class="btn primary" disabled>Send (Optional)</button></div>
+          <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button></div>
           <div class="footer-note">This lifecycle state is protected from re-preparation.</div>
         {{end}}
       </div></div>
