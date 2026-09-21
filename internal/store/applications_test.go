@@ -258,13 +258,9 @@ func TestMigrateApplicationsAddsReviewColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open raw: %v", err)
 	}
+	defer raw.Close()
+
 	_, err = raw.Exec(`
-CREATE TABLE jobs (
-	id TEXT PRIMARY KEY,
-	title TEXT NOT NULL,
-	url TEXT NOT NULL,
-	searched_at TEXT NOT NULL
-);
 CREATE TABLE applications (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	job_id TEXT NOT NULL UNIQUE,
@@ -282,22 +278,22 @@ CREATE TABLE applications (
 );
 `)
 	if err != nil {
-		raw.Close()
-		t.Fatalf("create legacy schema: %v", err)
+		t.Fatalf("create legacy applications schema: %v", err)
 	}
-	raw.Close()
 
-	st, err := Open(path)
-	if err != nil {
-		t.Fatalf("Open migrated DB: %v", err)
+	// Exercise only the migration under test. Store.Open also runs unrelated
+	// jobs-table migrations/backfills whose schema is intentionally outside
+	// this fixture.
+	if err := migrateApplications(raw); err != nil {
+		t.Fatalf("migrateApplications: %v", err)
 	}
-	defer st.Close()
 
-	rows, err := st.db.Query(`PRAGMA table_info(applications)`)
+	rows, err := raw.Query(`PRAGMA table_info(applications)`)
 	if err != nil {
 		t.Fatalf("table_info: %v", err)
 	}
 	defer rows.Close()
+
 	cols := map[string]bool{}
 	for rows.Next() {
 		var cid int
@@ -309,7 +305,15 @@ CREATE TABLE applications (
 		}
 		cols[name] = true
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("table_info rows: %v", err)
+	}
 	if !cols["reviewed_at"] || !cols["review_note"] {
 		t.Fatalf("review columns missing after migration: %+v", cols)
+	}
+
+	// Idempotency: running the migration again must be a no-op.
+	if err := migrateApplications(raw); err != nil {
+		t.Fatalf("second migrateApplications: %v", err)
 	}
 }
