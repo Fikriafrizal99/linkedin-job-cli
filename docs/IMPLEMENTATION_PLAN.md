@@ -17,7 +17,7 @@ Do these first.
 ## P1 — Application Data Extraction
 
 - [x] Parse and persist `posted_at` when an exact date is available.
-- [ ] Add `posted_at_estimated` when derived from relative time.
+- [x] Add `posted_at_estimated` when derived from relative time.
 - [x] Add deterministic email extractor.
 - [x] Support multiple explicit emails.
 - [x] Add primary `apply_email`.
@@ -28,7 +28,7 @@ Do these first.
 - [x] Classify matching structural content before persisting the new job ID.
 - [x] Add probable repost classification using structural identity + posting-date context.
 - [x] Add bounded retry/backoff for 429 and transient 5xx; do not retry 403.
-- [ ] Add collector integration tests.
+- [x] Add collector integration tests covering anonymous search, adaptive pagination, detail/application parsing, dedup metadata, and SQLite round-trip.
 
 ## P2 — HR Contact Enrichment
 
