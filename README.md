@@ -362,17 +362,20 @@ linkedin-jobs serve                      # read-only browser on http://127.0.0.1
 linkedin-jobs serve --port 9000          # custom port
 ```
 
-Serves a local page listing every stored job with all fields visible.
-Long-text fields (description, summaries, company overview, fit reason, notes)
-are collapsed by default and expand on click; the job title links out to its
-LinkedIn posting (and marks the job `new → viewed` automatically). Includes
-full-text search (FTS5), filters (company, location, salary, score, status,
-source, remote), and sort by fit score or salary — all reusing the same store
-layer as the CLI. Binds to localhost only.
+The local browser now includes the **Job Command Center** under `/app/` with Dashboard, Jobs, Applications, CV Profiles, Collect Jobs, and Settings. The previous jobs browser remains available at `/legacy`.
 
-Editable from the browser: job **status** (`new`/`viewed`/`saved`/`applied`/
-`rejected`) and **hard delete**. Every other field stays read-only. Writes are
-POST endpoints guarded by a per-session CSRF token.
+The **Applications** page is an application workbench with multi-select batch actions:
+
+- Prepare Selected
+- Create Drafts
+- Review Selected / Review Draft Queue
+- Confirm Send for already-APPROVED Gmail drafts
+
+The Review Queue provides sequential `Approve & Next` review so multiple Gmail drafts can be processed without opening every Application Detail page. Sending remains explicit: a separate final confirmation page and checkbox are required before Gmail `drafts.send` is called. There is no auto-send or auto-apply.
+
+See [Application Workbench](docs/APPLICATION_WORKBENCH.md), [Gmail Setup](docs/GMAIL_SETUP.md), and [UI Reference](docs/UI_REFERENCE.md) for the current workflow and safety boundaries.
+
+The local server binds to localhost by default. Browser write endpoints are POST actions guarded by the per-session CSRF token and existing lifecycle checks.
 
 ### Rubric scoring
 
