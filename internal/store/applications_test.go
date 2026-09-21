@@ -386,3 +386,60 @@ func TestMarkApplicationSent(t *testing.T) {
 		t.Fatal("expected conflicting sent message id error")
 	}
 }
+
+
+func TestReplaceApplicationDraftResetsApproval(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-recreate-draft")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "old-draft"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ApproveApplication(j.ID, "reviewed old draft"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.ReplaceApplicationDraft(j.ID, "new-draft")
+	if err != nil {
+		t.Fatalf("ReplaceApplicationDraft: %v", err)
+	}
+	if got.State != models.ApplicationStateDraftCreated {
+		t.Fatalf("state=%q want DRAFT_CREATED", got.State)
+	}
+	if got.GmailDraftID != "new-draft" {
+		t.Fatalf("draft=%q", got.GmailDraftID)
+	}
+	if got.ReviewedAt != "" || got.ReviewNote != "" {
+		t.Fatalf("old approval was not cleared: %+v", got)
+	}
+	if got.Subject != "Subject" || got.Body != "Body" || got.CVProfile != "general" {
+		t.Fatalf("prepared content changed: %+v", got)
+	}
+}
+
+func TestReplaceApplicationDraftRejectsSent(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-recreate-sent")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(j.ID); err != nil { t.Fatal(err) }
+	if _, err := st.SaveApplicationPreparation(j.ID, "Subject", "Body", "general"); err != nil { t.Fatal(err) }
+	if _, err := st.MarkApplicationDraftCreated(j.ID, "draft"); err != nil { t.Fatal(err) }
+	if _, err := st.ApproveApplication(j.ID, "reviewed"); err != nil { t.Fatal(err) }
+	if _, err := st.MarkApplicationSent(j.ID, "msg", "thread"); err != nil { t.Fatal(err) }
+
+	if _, err := st.ReplaceApplicationDraft(j.ID, "replacement"); err == nil {
+		t.Fatal("expected SENT draft recreation to be rejected")
+	}
+}
