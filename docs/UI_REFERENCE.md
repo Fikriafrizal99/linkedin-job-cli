@@ -313,7 +313,7 @@ Draft polish now keeps managed storage IDs out of the outgoing MIME filename. Op
 
 See `docs/GMAIL_SETUP.md` for setup instructions.
 
-### Manual Review / Approval UI — implemented, pending live validation
+### Manual Review / Approval UI — live validated
 
 Application Detail now exposes real review actions backed by the existing store lifecycle:
 
@@ -333,7 +333,7 @@ Behavior:
 - unapprove keeps the existing Gmail draft ID and returns `APPROVED → DRAFT_CREATED`;
 - no send POST action is exposed by this phase.
 
-This UI wiring is implemented and covered by regression tests, but still requires live browser validation.
+This UI wiring is covered by regression tests and has been live-validated in the user's local browser.
 
 
 
