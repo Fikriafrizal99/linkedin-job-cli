@@ -359,7 +359,7 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 		t.Fatalf("execute fresh detail: %v", err)
 	}
 	if !strings.Contains(fresh.String(), `action="/app/jobs/12345/queue"`) ||
-		!strings.Contains(fresh.String(), "Queue Application") ||
+		!strings.Contains(fresh.String(), "Queue Email Application") ||
 		!strings.Contains(fresh.String(), "READY_EMAIL") {
 		t.Fatalf("fresh job detail missing queue UI: %s", fresh.String())
 	}
@@ -374,7 +374,7 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 		t.Fatalf("execute queued detail: %v", err)
 	}
 	if !strings.Contains(queued.String(), "View Application") ||
-		strings.Contains(queued.String(), "Queue Application") {
+		strings.Contains(queued.String(), "Queue Email Application") {
 		t.Fatalf("queued job detail should show view action only")
 	}
 }
@@ -515,5 +515,50 @@ func TestApplicationDetailBlocksPrepareForNeedReview(t *testing.T) {
 	out := buf.String()
 	if strings.Contains(out, "/prepare") || !strings.Contains(out, "Recipient/email is not confirmed") {
 		t.Fatalf("NEED_REVIEW should block prepare: %s", out)
+	}
+}
+
+
+func TestJobDetailRendersEasyApplyQueueAction(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	job := &models.JobPosting{
+		ID: "easy-job",
+		Title: "Account Executive",
+		Company: "Example",
+		URL: "https://www.linkedin.com/jobs/view/123456/",
+		ApplicationMethod: "LINKEDIN",
+	}
+	var out bytes.Buffer
+	if err := tpl.Execute(&out, appPageData{
+		Title: "Job Detail", Active: "jobs", CSRF: "csrf",
+		CandidateName: "Candidate", CandidateInitials: "C",
+		SelectedJob: job,
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	html := out.String()
+	for _, want := range []string{"EASY_APPLY", "Queue Easy Apply", "READY_EASY_APPLY"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("Easy Apply job detail missing %q", want)
+		}
+	}
+	if strings.Contains(html, "Queue as NEED_REVIEW") {
+		t.Fatal("Easy Apply must not be presented as NEED_REVIEW")
+	}
+}
+
+func TestApplicationMethodLabelMapsLinkedInToEasyApply(t *testing.T) {
+	if got := applicationMethodLabel("LINKEDIN"); got != "EASY_APPLY" {
+		t.Fatalf("label=%q", got)
+	}
+	if got := applicationMethodLabel("EMAIL"); got != "EMAIL" {
+		t.Fatalf("email label=%q", got)
+	}
+	j := &models.JobPosting{ApplicationMethod: "LINKEDIN"}
+	if !matchesUIJob(j, "NOT_APPLIED", "", "", "EASY_APPLY", "") {
+		t.Fatal("EASY_APPLY UI filter should match stored LINKEDIN method")
 	}
 }
