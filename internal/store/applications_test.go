@@ -309,7 +309,8 @@ CREATE TABLE applications (
 		t.Fatalf("table_info rows: %v", err)
 	}
 	if !cols["reviewed_at"] || !cols["review_note"] ||
-		!cols["gmail_message_id"] || !cols["gmail_thread_id"] {
+		!cols["gmail_message_id"] || !cols["gmail_thread_id"] ||
+		!cols["apply_url"] || !cols["opened_at"] || !cols["applied_at"] {
 		t.Fatalf("application lifecycle columns missing after migration: %+v", cols)
 	}
 
