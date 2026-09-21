@@ -114,6 +114,7 @@ func (ws *webServer) handleAppMarkEasyApplyApplied(w http.ResponseWriter, r *htt
 	}
 
 	target := safeEasyApplyReturnTo(r.PostFormValue("return_to"))
+	target = easyApplyReturnAfterApplied(target, jobID)
 	if target == "" {
 		target = "/app/applications/easy-apply?easy_applied=1"
 	} else {
@@ -185,6 +186,60 @@ func easyApplyQueueURL(ids []string, pos int) string {
 	q.Set("ids", strings.Join(ids, ","))
 	q.Set("pos", strconv.Itoa(pos))
 	return "/app/applications/easy-apply?" + q.Encode()
+}
+
+func easyApplyReturnAfterApplied(target, currentID string) string {
+	target = safeEasyApplyReturnTo(target)
+	if target == "" {
+		return ""
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return ""
+	}
+	q := u.Query()
+	rawIDs := strings.TrimSpace(q.Get("ids"))
+	if rawIDs == "" {
+		return target
+	}
+	ids := []string{}
+	for _, raw := range strings.Split(rawIDs, ",") {
+		id := strings.TrimSpace(raw)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) <= 1 {
+		return "/app/applications/easy-apply"
+	}
+	current := -1
+	for i, id := range ids {
+		if id == currentID {
+			current = i
+			break
+		}
+	}
+	if current < 0 {
+		return target
+	}
+	nextID := ids[(current+1)%len(ids)]
+	remaining := make([]string, 0, len(ids)-1)
+	for _, id := range ids {
+		if id != currentID {
+			remaining = append(remaining, id)
+		}
+	}
+	nextPos := 0
+	for i, id := range remaining {
+		if id == nextID {
+			nextPos = i
+			break
+		}
+	}
+	q.Set("ids", strings.Join(remaining, ","))
+	q.Set("pos", strconv.Itoa(nextPos))
+	u.RawQuery = q.Encode()
+	return u.RequestURI()
 }
 
 func safeEasyApplyReturnTo(raw string) string {
