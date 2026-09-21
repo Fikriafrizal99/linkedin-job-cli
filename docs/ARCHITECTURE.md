@@ -443,7 +443,7 @@ Optional actual-person resolution is authenticated and bounded:
 role target
    |
    v
-LinkedIn people search
+LinkedIn Voyager GraphQL people search
 (currentCompany scoped)
    |
    v
@@ -462,6 +462,8 @@ linkedin-jobs contacts enrich --all --unknown-only --limit 10 --resolve
 ```
 
 Resolution requires a valid LinkedIn session. It inspects at most 10 search results per role target, has a configurable delay between role searches, and never sends a message or connection request.
+
+People search uses LinkedIn's persisted Voyager GraphQL `voyagerSearchDashClusters` query. The older REST `/search/dash/clusters` surface is not used. Because LinkedIn rotates persisted query IDs with web-client releases, a bounded recent-ID fallback is allowed only for HTTP 400 stale-query responses; authentication, challenge, forbidden, and rate-limit responses are not bypassed.
 
 For WSL/headless environments, session material can be imported from standard input instead of command-line arguments:
 
