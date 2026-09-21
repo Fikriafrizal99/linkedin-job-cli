@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	appengine "linkedin-jobs/internal/application"
 	"linkedin-jobs/internal/config"
 	"linkedin-jobs/internal/models"
 	"linkedin-jobs/internal/store"
@@ -221,6 +222,78 @@ func (ws *webServer) handleAppQueueApplication(w http.ResponseWriter, r *http.Re
 	http.Redirect(w, r, "/app/applications/"+url.PathEscape(a.JobID)+"?"+q.Encode(), http.StatusSeeOther)
 }
 
+func (ws *webServer) handleAppPrepareApplication(w http.ResponseWriter, r *http.Request) {
+	if !ws.checkCSRF(w, r) {
+		return
+	}
+	jobID := strings.TrimSpace(r.PathValue("id"))
+	if jobID == "" {
+		http.Error(w, "missing job id", http.StatusBadRequest)
+		return
+	}
+
+	a, err := ws.st.GetApplicationByJobID(jobID)
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+	if a == nil {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("application is not queued"))
+		return
+	}
+	if a.State != models.ApplicationStateReadyEmail {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("application state is %s; expected READY_EMAIL", a.State))
+		return
+	}
+
+	job, err := ws.st.Get(jobID)
+	if err != nil || job == nil {
+		if err == nil {
+			err = fmt.Errorf("collector job not found")
+		}
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+	settings, err := config.LoadSettings()
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("load settings: %w", err))
+		return
+	}
+
+	override := strings.TrimSpace(r.PostFormValue("cv_profile"))
+	if len(override) > 80 {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("CV profile id is too long"))
+		return
+	}
+	prepared, err := appengine.Prepare(job, settings.Application, override)
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+	if _, err := ws.st.SaveApplicationPreparation(jobID, prepared.Subject, prepared.Body, prepared.CVProfile); err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+
+	q := url.Values{"prepared": {"1"}}
+	if prepared.CVProfile != "" {
+		q.Set("cv_profile", prepared.CVProfile)
+	}
+	http.Redirect(w, r, "/app/applications/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
+}
+
+func redirectApplicationAction(w http.ResponseWriter, r *http.Request, jobID string, actionErr error) {
+	q := url.Values{}
+	if actionErr != nil {
+		msg := actionErr.Error()
+		if len(msg) > 240 {
+			msg = msg[:240]
+		}
+		q.Set("action_error", msg)
+	}
+	http.Redirect(w, r, "/app/applications/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
+}
+
 func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd := appPageData{
 		CSRF: ws.csrf, Active: "dashboard", Title: "Dashboard",
@@ -286,6 +359,13 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd.ActionError = strings.TrimSpace(r.URL.Query().Get("action_error"))
 	if r.URL.Query().Get("queued") == "1" {
 		pd.ActionMessage = "Application queued successfully."
+	}
+	if r.URL.Query().Get("prepared") == "1" {
+		profile := strings.TrimSpace(r.URL.Query().Get("cv_profile"))
+		pd.ActionMessage = "Application prepared successfully."
+		if profile != "" {
+			pd.ActionMessage += " CV profile: " + profile + "."
+		}
 	}
 	if r.URL.Query().Get("collect") == "done" {
 		pd.CollectSearched, _ = strconv.Atoi(r.URL.Query().Get("searched"))
@@ -638,7 +718,22 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
         <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
         <div class="detail-grid" style="margin-top:14px"><div class="info-card"><h3>Provider</h3><div class="info-row"><span>Draft ID</span><b>{{.SelectedApplication.GmailDraftID}}</b></div><div class="info-row"><span>Message ID</span><b>{{.SelectedApplication.GmailMessageID}}</b></div><div class="info-row"><span>Thread ID</span><b>{{.SelectedApplication.GmailThreadID}}</b></div></div><div class="info-card"><h3>Review</h3><div class="info-row"><span>Reviewed</span><b>{{.SelectedApplication.ReviewedAt}}</b></div><div class="info-row"><span>Note</span><b>{{.SelectedApplication.ReviewNote}}</b></div><div class="info-row"><span>Sent</span><b>{{.SelectedApplication.SentAt}}</b></div></div></div>
-        <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button><button class="btn ghost" disabled>Unapprove</button><button class="btn primary" disabled>Send (Optional)</button></div><div class="footer-note">Action wiring will reuse the existing guarded backend lifecycle. No send action is enabled in this UI phase.</div>
+        {{if eq .SelectedApplication.State "READY_EMAIL"}}
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/prepare" style="margin-top:16px">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <div class="form-grid">
+              <div class="form-group"><label>CV Profile</label><select name="cv_profile"><option value="">Auto (deterministic)</option>{{range .CVProfiles}}<option value="{{.ID}}" {{if eq $.SelectedApplication.CVProfile .ID}}selected{{end}}>{{.ID}}{{if .Default}} · default{{end}}</option>{{end}}</select></div>
+              <div class="form-group"><label>Preparation Mode</label><input value="Deterministic template · no LLM" readonly></div>
+            </div>
+            <div class="detail-actions"><button class="btn primary" type="submit">{{if .SelectedApplication.Subject}}Re-prepare Application{{else}}Prepare Application{{end}}</button></div>
+          </form>
+          <div class="footer-note">This generates and stores subject/body + CV profile only. It does not create a Gmail draft or send email.</div>
+        {{else if eq .SelectedApplication.State "NEED_REVIEW"}}
+          <div class="alert" style="margin-top:16px">Recipient/email is not confirmed. Resolve the application contact before preparing this record.</div>
+        {{else}}
+          <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button><button class="btn ghost" disabled>Unapprove</button><button class="btn primary" disabled>Send (Optional)</button></div>
+          <div class="footer-note">This lifecycle state is protected from re-preparation.</div>
+        {{end}}
       </div></div>
     {{else}}
       <div class="pipeline-strip">
