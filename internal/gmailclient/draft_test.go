@@ -38,6 +38,32 @@ func TestBuildMIMEIncludesBodyAndAttachment(t *testing.T) {
 	}
 }
 
+
+func TestBuildMIMEUsesFriendlyAttachmentNameOverride(t *testing.T) {
+	dir := t.TempDir()
+	stored := filepath.Join(dir, "portofolio-1789976350172620028.pdf")
+	if err := os.WriteFile(stored, []byte("%PDF-portfolio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := BuildMIME(appengine.DraftPayload{
+		To:              "jobs@example.com",
+		Subject:         "Application",
+		Body:            "Body",
+		AttachmentFiles: []string{stored},
+		AttachmentNames: []string{"Mochamad_Fikri_Afrizal_Portfolio_2026.pdf"},
+	})
+	if err != nil {
+		t.Fatalf("BuildMIME: %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "Mochamad_Fikri_Afrizal_Portfolio_2026.pdf") {
+		t.Fatalf("friendly attachment filename missing: %s", text)
+	}
+	if strings.Contains(text, "portofolio-1789976350172620028.pdf") {
+		t.Fatalf("managed storage filename leaked into MIME: %s", text)
+	}
+}
+
 func TestCreateDraftPostsBase64URLMessage(t *testing.T) {
 	cv := filepath.Join(t.TempDir(), "CV.pdf")
 	if err := os.WriteFile(cv, []byte("%PDF-test"), 0o600); err != nil {
