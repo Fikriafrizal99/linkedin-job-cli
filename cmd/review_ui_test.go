@@ -182,7 +182,8 @@ func TestApplicationDetailRendersManualReviewActions(t *testing.T) {
 	for _, want := range []string{
 		"action=\"/app/applications/60001/unapprove\"",
 		"Unapprove &amp; Reopen Review",
-		"Send (separate phase)",
+		"Review &amp; Send Application",
+		"action=\"/app/applications/send-confirm\"",
 		"2026-09-21T14:00:00Z",
 	} {
 		if !strings.Contains(approved, want) {
