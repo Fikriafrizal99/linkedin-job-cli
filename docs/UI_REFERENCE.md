@@ -339,7 +339,7 @@ Behavior:
 
 This UI wiring is covered by regression tests and has been live-validated in the user's local browser.
 
-### Application Workbench + Batch Workflow — implemented, pending live validation
+### Application Workbench + Batch Workflow — batch flow live validated / explicit send pending live validation
 
 The Applications page is now the high-throughput operating surface for multiple records.
 
@@ -380,7 +380,7 @@ There is still no auto-apply, auto-approval, or auto-send.
 
 See `docs/APPLICATION_WORKBENCH.md` for the operating workflow and safety boundaries.
 
-This phase is implemented with regression coverage and is pending live browser validation.
+The batch workbench flow (selection, bulk prepare/draft controls, Review Queue, and Approve & Next) has been live-validated in the user's local browser. The final Gmail `drafts.send` action remains pending live validation because it sends a real email.
 
 
 
