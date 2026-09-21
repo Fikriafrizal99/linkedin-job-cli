@@ -75,6 +75,7 @@ Binds to localhost only by default.`,
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /", ws.handleAppRoot)
 		mux.HandleFunc("GET /app/", ws.handleAppUI)
+		mux.HandleFunc("POST /app/collect/run", ws.handleAppCollectRun)
 		mux.HandleFunc("GET /legacy", ws.handleLegacyIndex)
 		mux.HandleFunc("GET /assets/logo.png", handleLogo)
 		mux.HandleFunc("POST /jobs/{id}/status", ws.handleStatus)
@@ -125,6 +126,7 @@ type webServer struct {
 	csrf        string
 	filtersPath string
 	filtersMu   sync.Mutex
+	collectMu   sync.Mutex
 }
 
 func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
