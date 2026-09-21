@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -15,7 +17,7 @@ import (
 	"linkedin-jobs/internal/store"
 )
 
-const guestSearchURL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+var guestSearchURL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 
 var jobIDRE = regexp.MustCompile(`jobPosting:(\d+)`)
 
@@ -304,12 +306,17 @@ func isDigits(s string) bool {
 }
 
 func parseCard(s *goquery.Selection) *models.JobPosting {
+	return parseCardAt(s, time.Now().UTC())
+}
+
+func parseCardAt(s *goquery.Selection, base time.Time) *models.JobPosting {
 	urn, _ := s.Attr("data-entity-urn")
 	m := jobIDRE.FindStringSubmatch(urn)
 	if m == nil {
 		return nil
 	}
-	now := store.NowISO()
+	base = base.UTC()
+	now := base.Format(time.RFC3339)
 	j := &models.JobPosting{
 		ID: m[1], SearchedAt: now, Source: "search",
 		FirstSeen: now, LastSeen: now, ScrapedAt: now,
@@ -329,8 +336,12 @@ func parseCard(s *goquery.Selection) *models.JobPosting {
 		j.Location = strings.TrimSpace(loc.Text())
 	}
 	if tm := s.Find("time").First(); tm.Length() > 0 {
-		if dt, ok := tm.Attr("datetime"); ok {
+		if dt, ok := tm.Attr("datetime"); ok && strings.TrimSpace(dt) != "" {
 			j.PostedAt = strings.TrimSpace(dt)
+			j.PostedAtEstimated = false
+		} else if estimated, ok := estimatePostedAtFromText(tm.Text(), base); ok {
+			j.PostedAt = estimated
+			j.PostedAtEstimated = true
 		}
 	}
 	if link := s.Find("a.base-card__full-link").First(); link.Length() > 0 {
@@ -342,6 +353,72 @@ func parseCard(s *goquery.Selection) *models.JobPosting {
 		return nil
 	}
 	return j
+}
+
+var relativePostedRE = regexp.MustCompile("(?i)(?:posted|reposted)?\\s*(\\d+)\\s+(minute|hour|day|week|month|year)s?\\s+ago")
+
+// estimatePostedAtFromText converts LinkedIn's relative posting labels into an
+// approximate UTC timestamp. Callers must mark the result as estimated; exact
+// JSON-LD/date-time values always take precedence when available.
+func estimatePostedAtFromText(raw string, base time.Time) (string, bool) {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	if text == "" {
+		return "", false
+	}
+	base = base.UTC()
+	if strings.Contains(text, "just now") || strings.Contains(text, "moments ago") {
+		return base.Format(time.RFC3339), true
+	}
+	m := relativePostedRE.FindStringSubmatch(text)
+	if m == nil {
+		return "", false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil || n < 0 {
+		return "", false
+	}
+	var estimated time.Time
+	switch strings.ToLower(m[2]) {
+	case "minute":
+		estimated = base.Add(-time.Duration(n) * time.Minute)
+	case "hour":
+		estimated = base.Add(-time.Duration(n) * time.Hour)
+	case "day":
+		estimated = base.AddDate(0, 0, -n)
+	case "week":
+		estimated = base.AddDate(0, 0, -7*n)
+	case "month":
+		estimated = base.AddDate(0, -n, 0)
+	case "year":
+		estimated = base.AddDate(-n, 0, 0)
+	default:
+		return "", false
+	}
+	return estimated.UTC().Format(time.RFC3339), true
+}
+
+// relativePostedText returns the first detail-page text that looks like a
+// relative posted-age label. It is used only when no exact posting date exists.
+func relativePostedText(doc *goquery.Document) string {
+	selectors := []string{"time", ".posted-time-ago__text", ".topcard__flavor--metadata"}
+	for _, selector := range selectors {
+		found := ""
+		doc.Find(selector).EachWithBreak(func(_ int, sel *goquery.Selection) bool {
+			text := strings.TrimSpace(sel.Text())
+			lower := strings.ToLower(text)
+			if relativePostedRE.MatchString(text) ||
+				strings.Contains(lower, "just now") ||
+				strings.Contains(lower, "moments ago") {
+				found = text
+				return false
+			}
+			return true
+		})
+		if found != "" {
+			return found
+		}
+	}
+	return ""
 }
 
 // FetchDetail fetches a job's detail page and fills salary + description.
@@ -410,10 +487,20 @@ func (c *Client) FetchDetail(j *models.JobPosting) error {
 	}
 	if meta.DatePosted != "" {
 		j.PostedAt = meta.DatePosted
-	} else if j.PostedAt == "" {
+		j.PostedAtEstimated = false
+	} else {
+		exactFound := false
 		if tm := doc.Find("time").First(); tm.Length() > 0 {
-			if dt, ok := tm.Attr("datetime"); ok {
+			if dt, ok := tm.Attr("datetime"); ok && strings.TrimSpace(dt) != "" {
 				j.PostedAt = strings.TrimSpace(dt)
+				j.PostedAtEstimated = false
+				exactFound = true
+			}
+		}
+		if !exactFound && j.PostedAt == "" {
+			if estimated, ok := estimatePostedAtFromText(relativePostedText(doc), time.Now().UTC()); ok {
+				j.PostedAt = estimated
+				j.PostedAtEstimated = true
 			}
 		}
 	}
