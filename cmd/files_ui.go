@@ -75,24 +75,27 @@ func (ws *webServer) handleCVProfileUpload(w http.ResponseWriter, r *http.Reques
 		redirectCVProfiles(w, r, "", err)
 		return
 	}
+	if ext != ".pdf" && ext != ".doc" && ext != ".docx" {
+		redirectCVProfiles(w, r, "", fmt.Errorf("CV files must be PDF, DOC, or DOCX"))
+		return
+	}
 	destDir := filepath.Join(managedFilesRoot(), "cv")
 	if err := os.MkdirAll(destDir, 0o700); err != nil {
 		redirectCVProfiles(w, r, "", err)
 		return
 	}
 	destPath := filepath.Join(destDir, profileID+ext)
-	if err := writeManagedUpload(file, destPath); err != nil {
-		redirectCVProfiles(w, r, "", err)
-		return
-	}
 
 	ws.documentMu.Lock()
 	defer ws.documentMu.Unlock()
 
 	settings, err := config.LoadSettings()
 	if err != nil {
-		_ = os.Remove(destPath)
 		redirectCVProfiles(w, r, "", fmt.Errorf("load settings: %w", err))
+		return
+	}
+	if err := writeManagedUpload(file, destPath); err != nil {
+		redirectCVProfiles(w, r, "", err)
 		return
 	}
 	app := settings.Application
@@ -458,6 +461,21 @@ func resolveAttachmentPaths(configured []config.AttachmentSettings, ids []string
 		out = append(out, path)
 	}
 	return out, nil
+}
+
+func validateDraftAttachmentTotal(paths []string, maxBytes int64) error {
+	var total int64
+	for _, path := range paths {
+		info, err := os.Stat(strings.TrimSpace(path))
+		if err != nil || info.IsDir() {
+			return fmt.Errorf("attachment %q is not accessible", filepath.Base(path))
+		}
+		total += info.Size()
+		if total > maxBytes {
+			return fmt.Errorf("combined draft attachments exceed %.0f MiB", float64(maxBytes)/float64(1<<20))
+		}
+	}
+	return nil
 }
 
 func attachmentView(a config.AttachmentSettings) appAttachment {
