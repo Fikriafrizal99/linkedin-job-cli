@@ -12,8 +12,22 @@ import (
 // Settings holds tunable runtime settings loaded from a YAML file. Zero values
 // are replaced by DefaultSettings so callers always get usable numbers.
 type Settings struct {
-	Scoring ScoringSettings `yaml:"scoring"`
-	Profile ProfileSettings `yaml:"profile"`
+	Scoring     ScoringSettings     `yaml:"scoring"`
+	Profile     ProfileSettings     `yaml:"profile"`
+	Application ApplicationSettings `yaml:"application"`
+}
+
+type ApplicationSettings struct {
+	CandidateName    string              `yaml:"candidate_name,omitempty"`
+	DefaultCVProfile string              `yaml:"default_cv_profile,omitempty"`
+	CVProfiles       []CVProfileSettings `yaml:"cv_profiles,omitempty"`
+}
+
+type CVProfileSettings struct {
+	ID       string   `yaml:"id"`
+	Path     string   `yaml:"path,omitempty"`
+	Keywords []string `yaml:"keywords,omitempty"`
+	Priority int      `yaml:"priority,omitempty"`
 }
 
 // ProfileSettings holds the structured candidate preferences that drive the
@@ -210,6 +224,11 @@ profile:
   location: ""                  # city/country; drives currency + salary-band pick
   preferred_tech: []            # tech tokens (also surfaced as a dynamic rubric via setup)
   avoided_tech: []              # tech tokens to penalize (surfaced as a dynamic rubric via setup)
+
+application:
+  candidate_name: ""
+  default_cv_profile: ""
+  cv_profiles: []
 `
 
 // EnsureSettings writes a default settings.yaml to SettingsPath() if the file
