@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"sort"
 	"strings"
 	"time"
@@ -61,6 +63,17 @@ type appPageData struct {
 	Locations []string
 	Methods []string
 	States []string
+	CollectKeywords string
+	CollectLocation string
+	CollectPostedWithin string
+	CollectTop int
+	CollectMessage string
+	CollectError string
+	CollectSearched int
+	CollectNew int
+	CollectPersisted int
+	CollectExactDuplicates int
+	CollectLikelyReposts int
 	Error string
 }
 
@@ -104,8 +117,95 @@ func (ws *webServer) handleAppUI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (ws *webServer) handleAppCollectRun(w http.ResponseWriter, r *http.Request) {
+	if !ws.checkCSRF(w, r) {
+		return
+	}
+	req, err := parseUICollectForm(r.PostForm)
+	if err != nil {
+		redirectCollectResult(w, r, req, nil, err)
+		return
+	}
+
+	ws.collectMu.Lock()
+	result, runErr := runCollect(req, ws.st, nil)
+	ws.collectMu.Unlock()
+	redirectCollectResult(w, r, req, result, runErr)
+}
+
+func parseUICollectForm(v url.Values) (collectRequest, error) {
+	req := collectRequest{
+		Keywords:     strings.TrimSpace(v.Get("keywords")),
+		Location:     strings.TrimSpace(v.Get("location")),
+		PostedWithin: strings.TrimSpace(v.Get("posted_within")),
+	}
+	if req.Keywords == "" {
+		return req, fmt.Errorf("keywords are required")
+	}
+	if len(req.Keywords) > 160 {
+		return req, fmt.Errorf("keywords are too long")
+	}
+	if len(req.Location) > 160 {
+		return req, fmt.Errorf("location is too long")
+	}
+	if req.PostedWithin == "" {
+		req.PostedWithin = "7d"
+	}
+	if _, err := resolvePostedWithin(req.PostedWithin); err != nil {
+		return req, err
+	}
+
+	top := 50
+	if raw := strings.TrimSpace(v.Get("top")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return req, fmt.Errorf("maximum results must be a number")
+		}
+		top = n
+	}
+	if top < 1 || top > 100 {
+		return req, fmt.Errorf("maximum results must be between 1 and 100")
+	}
+	req.Top = top
+	// The browser UI deliberately exposes only the anonymous, non-destructive
+	// collector. Session fallback and force-overwrite remain CLI-only controls.
+	req.WithSession = false
+	req.ForceOverwrite = false
+	return req, nil
+}
+
+func redirectCollectResult(w http.ResponseWriter, r *http.Request, req collectRequest, result *collectRunResult, runErr error) {
+	q := url.Values{}
+	q.Set("keywords", req.Keywords)
+	q.Set("location", req.Location)
+	q.Set("posted_within", nonEmpty(req.PostedWithin, "7d"))
+	if req.Top > 0 {
+		q.Set("top", strconv.Itoa(req.Top))
+	}
+	if runErr != nil {
+		msg := runErr.Error()
+		if len(msg) > 240 {
+			msg = msg[:240]
+		}
+		q.Set("collect_error", msg)
+	} else if result != nil {
+		q.Set("collect", "done")
+		q.Set("searched", strconv.Itoa(result.Searched))
+		q.Set("new", strconv.Itoa(result.NewCandidates))
+		q.Set("persisted", strconv.Itoa(result.Persisted))
+		q.Set("exact", strconv.Itoa(result.ExactDuplicates))
+		q.Set("reposts", strconv.Itoa(result.LikelyReposts))
+	}
+	http.Redirect(w, r, "/app/collect?"+q.Encode(), http.StatusSeeOther)
+}
+
 func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
-	pd := appPageData{CSRF: ws.csrf, Active: "dashboard", Title: "Dashboard", Subtitle: "Overview of your job search and application progress."}
+	pd := appPageData{
+		CSRF: ws.csrf, Active: "dashboard", Title: "Dashboard",
+		Subtitle: "Overview of your job search and application progress.",
+		CollectKeywords: "Sales Executive", CollectLocation: "Indonesia",
+		CollectPostedWithin: "7d", CollectTop: 50,
+	}
 
 	settings, settingsErr := config.LoadSettings()
 	if settingsErr == nil {
@@ -151,6 +251,22 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd.LocationFilter = strings.TrimSpace(r.URL.Query().Get("location"))
 	pd.MethodFilter = strings.TrimSpace(r.URL.Query().Get("method"))
 	pd.StateFilter = strings.TrimSpace(r.URL.Query().Get("state"))
+
+	if v := strings.TrimSpace(r.URL.Query().Get("keywords")); v != "" { pd.CollectKeywords = v }
+	if v := strings.TrimSpace(r.URL.Query().Get("location")); v != "" { pd.CollectLocation = v }
+	if v := strings.TrimSpace(r.URL.Query().Get("posted_within")); v != "" { pd.CollectPostedWithin = v }
+	if v := strings.TrimSpace(r.URL.Query().Get("top")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 100 { pd.CollectTop = n }
+	}
+	pd.CollectError = strings.TrimSpace(r.URL.Query().Get("collect_error"))
+	if r.URL.Query().Get("collect") == "done" {
+		pd.CollectSearched, _ = strconv.Atoi(r.URL.Query().Get("searched"))
+		pd.CollectNew, _ = strconv.Atoi(r.URL.Query().Get("new"))
+		pd.CollectPersisted, _ = strconv.Atoi(r.URL.Query().Get("persisted"))
+		pd.CollectExactDuplicates, _ = strconv.Atoi(r.URL.Query().Get("exact"))
+		pd.CollectLikelyReposts, _ = strconv.Atoi(r.URL.Query().Get("reposts"))
+		pd.CollectMessage = fmt.Sprintf("Collection finished: %d searched, %d new, %d persisted.", pd.CollectSearched, pd.CollectNew, pd.CollectPersisted)
+	}
 
 	locationSet := map[string]bool{}
 	methodSet := map[string]bool{}
@@ -379,7 +495,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
 .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px}.toolbar .search{flex:1}.toolbar form{display:contents}.control{height:38px;border:1px solid #29455f;border-radius:8px;background:#13273e;color:#dbe5f1;padding:0 11px}.content-card{background:#0f2033;border:1px solid #223b56;border-radius:12px;overflow:hidden}.content-pad{padding:18px}.two-col{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,.8fr);gap:14px}.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.info-card{border:1px solid #27425d;background:#102338;border-radius:10px;padding:14px}.info-card h3{margin:0 0 10px;font-size:14px}.info-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #20384f}.info-row:last-child{border-bottom:0}.info-row span:first-child{color:#8194ab}
 .cv-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.cv-card{background:#10243a;border:1px solid #24415e;border-radius:12px;padding:18px;min-height:220px}.cv-card h3{margin:0;font-size:16px}.cv-default{float:right;background:#124b3a;color:#6be2af;border-radius:8px;padding:3px 7px;font-size:10px}.cv-path{color:#63aaff;margin:18px 0 8px;word-break:break-all}.cv-card p{color:#9cafc4;font-size:12px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.form-group label{display:block;color:#96a9bf;font-size:11px;margin-bottom:6px}.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #29475f;background:#142a42;color:#e5edf6;border-radius:8px;padding:10px}.collect-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.7fr);gap:14px}.progress-list{display:grid;gap:13px;margin-top:14px}.progress-item{display:flex;gap:9px;align-items:center;color:#a9b9cb}.dot{width:9px;height:9px;border-radius:50%;background:#25c58b;box-shadow:0 0 10px rgba(37,197,139,.45)}
 .settings-grid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px}.settings-menu button{display:block;width:100%;padding:10px 11px;border:0;border-radius:8px;color:#a9b9cb;background:transparent;text-align:left;cursor:pointer}.settings-menu button:hover{background:#112a43}.settings-menu button.active{background:#173b64;color:#76b4ff}.settings-pane{display:none}.settings-pane.active{display:block}.empty{padding:44px;text-align:center;color:#8194aa}
-.alert{padding:10px 13px;border:1px solid #6e4b25;background:#382919;color:#f1c178;border-radius:8px;margin-bottom:14px}
+.alert{padding:10px 13px;border:1px solid #6e4b25;background:#382919;color:#f1c178;border-radius:8px;margin-bottom:14px}.alert.success{border-color:#1f664d;background:#123a2e;color:#79ddb5}.collect-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:14px}.collect-summary .mini{background:#13283f;border:1px solid #29465f;border-radius:8px;padding:10px}.collect-summary b{display:block;font-size:18px}.collect-summary span{color:#8fa4bc;font-size:10px}
 .pipeline-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.pipeline-mini{background:#10243a;border:1px solid #223d58;border-radius:10px;padding:12px 14px}.pipeline-mini b{font-size:20px;display:block}.pipeline-mini span{font-size:11px;color:#8fa4bc}.footer-note{color:#637991;font-size:11px;margin-top:14px}
 @media(max-width:1400px) and (min-width:1051px){.main{padding-top:calc(var(--top) + 20px)}.page-head{margin-bottom:16px}.grid-kpi{gap:12px;margin-bottom:14px}.kpi{min-height:96px;padding:15px}.panel-head{height:54px}.detail{padding:16px}.email-body{min-height:145px}}
 @media(max-width:1050px){.grid-kpi{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.two-col,.collect-grid{grid-template-columns:1fr}.cv-grid{grid-template-columns:1fr 1fr}.quick-actions{grid-template-columns:1fr 1fr}}
@@ -504,9 +620,25 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   {{end}}
 
   {{if eq .Active "collect"}}
+    {{if .CollectError}}<div class="alert">{{.CollectError}}</div>{{end}}
+    {{if .CollectMessage}}<div class="alert success">{{.CollectMessage}}</div>{{end}}
     <div class="collect-grid">
-      <section class="content-card"><div class="content-pad"><h2>Search Criteria</h2><div class="form-grid"><div class="form-group"><label>Keywords / Job Title</label><input id="collect-keywords" value="Sales Executive" placeholder="e.g. Sales Executive"></div><div class="form-group"><label>Location</label><input id="collect-location" value="Indonesia"></div><div class="form-group"><label>Posted Within</label><select id="collect-posted"><option value="7d">Past week</option><option value="1d">Past 24 hours</option><option value="30d">Past month</option></select></div><div class="form-group"><label>Maximum Results</label><input id="collect-top" value="50"></div></div><div class="form-group" style="margin-top:12px"><label>Command Preview</label><div class="field" id="collect-preview">linkedin-jobs collect "Sales Executive" --location "Indonesia" --posted-within 7d --top 50</div></div><button class="btn primary" disabled style="margin-top:14px">Start Collecting</button><div class="footer-note">UI action is intentionally disabled until the collector POST endpoint is wired with CSRF and bounded execution.</div></div></section>
-      <aside class="content-card"><div class="content-pad"><h2>Collection Progress</h2><div class="progress-list"><div class="progress-item"><span class="dot"></span>Ready to run collector</div><div class="progress-item"><span class="dot"></span>SQLite store available</div><div class="progress-item"><span class="dot"></span>Application extraction enabled</div><div class="progress-item"><span class="dot"></span>Rate-limit safeguards active</div></div></div></aside>
+      <section class="content-card"><div class="content-pad"><h2>Search Criteria</h2>
+        <form method="post" action="/app/collect/run" id="collect-form">
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <div class="form-grid">
+            <div class="form-group"><label>Keywords / Job Title</label><input id="collect-keywords" name="keywords" value="{{.CollectKeywords}}" placeholder="e.g. Sales Executive" required maxlength="160"></div>
+            <div class="form-group"><label>Location</label><input id="collect-location" name="location" value="{{.CollectLocation}}" maxlength="160"></div>
+            <div class="form-group"><label>Posted Within</label><select id="collect-posted" name="posted_within"><option value="7d" {{if eq .CollectPostedWithin "7d"}}selected{{end}}>Past week</option><option value="1d" {{if eq .CollectPostedWithin "1d"}}selected{{end}}>Past 24 hours</option><option value="30d" {{if eq .CollectPostedWithin "30d"}}selected{{end}}>Past month</option></select></div>
+            <div class="form-group"><label>Maximum Results</label><input id="collect-top" name="top" type="number" min="1" max="100" value="{{.CollectTop}}" required></div>
+          </div>
+          <div class="form-group" style="margin-top:12px"><label>Command Preview</label><div class="field" id="collect-preview"></div></div>
+          <button class="btn primary" id="collect-submit" type="submit" style="margin-top:14px">Start Collecting</button>
+          <div class="footer-note">Anonymous public collection only. UI limit: 100 jobs per run. Existing LinkedIn IDs are skipped; force overwrite and session fallback remain CLI-only.</div>
+        </form>
+        {{if .CollectMessage}}<div class="collect-summary"><div class="mini"><b>{{.CollectSearched}}</b><span>Searched</span></div><div class="mini"><b>{{.CollectNew}}</b><span>New candidates</span></div><div class="mini"><b>{{.CollectPersisted}}</b><span>Persisted</span></div><div class="mini"><b>{{.CollectExactDuplicates}} / {{.CollectLikelyReposts}}</b><span>Exact / repost</span></div></div>{{end}}
+      </div></section>
+      <aside class="content-card"><div class="content-pad"><h2>Collection Progress</h2><div class="progress-list"><div class="progress-item"><span class="dot"></span>Anonymous LinkedIn search</div><div class="progress-item"><span class="dot"></span>Full detail + application extraction</div><div class="progress-item"><span class="dot"></span>Job-ID and structural dedup</div><div class="progress-item"><span class="dot"></span>Persist results to SQLite</div></div><div class="footer-note">The request remains open while collection runs. Do not submit the form twice.</div></div></aside>
     </div>
   {{end}}
 
@@ -551,6 +683,8 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
     out.textContent=cmd;
   }
   [k,l,p,t].forEach(function(el){if(el){el.addEventListener('input',update);el.addEventListener('change',update)}}); update();
+  var form=document.getElementById('collect-form'), submit=document.getElementById('collect-submit');
+  if(form&&submit){form.addEventListener('submit',function(){submit.disabled=true;submit.textContent='Collecting…';});}
 })();
 </script>
 </body>
