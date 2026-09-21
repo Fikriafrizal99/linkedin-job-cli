@@ -211,7 +211,9 @@ func (s *Store) RecordApplicationDraftError(jobID, message string) (*models.JobA
 	if existing == nil {
 		return nil, fmt.Errorf("job %s is not queued for application", jobID)
 	}
-	if existing.State == models.ApplicationStateDraftCreated || existing.State == models.ApplicationStateSent {
+	if existing.State == models.ApplicationStateDraftCreated ||
+		existing.State == models.ApplicationStateApproved ||
+		existing.State == models.ApplicationStateSent {
 		return existing, nil
 	}
 	now := NowISO()
