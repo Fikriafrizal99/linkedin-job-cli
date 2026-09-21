@@ -133,8 +133,8 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 		"name=\"filter_q\" value=\"sales\"",
 		"name=\"filter_location\" value=\"Jakarta\"",
 		"name=\"attachment\" value=\"portfolio-1\" checked",
-		"No explicit email · skipped by default",
-		"Include unsupported jobs as NEED_REVIEW",
+		"Unsupported destination · skipped by default",
+		"Include unsupported jobs as Needs attention",
 	} {
 		if !strings.Contains(html, want) { t.Errorf("Jobs bulk UI missing %q", want) }
 	}

@@ -347,6 +347,11 @@ func (ws *webServer) handleAppBulkSend(w http.ResponseWriter, r *http.Request) {
 
 func redirectBulkResult(w http.ResponseWriter, r *http.Request, action string, ok, skipped, failed int, actionErr error) {
 	q := url.Values{}
+	for _, key := range []string{"q", "method", "state", "since", "page"} {
+		if v := strings.TrimSpace(r.PostFormValue("filter_" + key)); v != "" {
+			q.Set(key, v)
+		}
+	}
 	q.Set("bulk", action)
 	q.Set("ok", strconv.Itoa(ok))
 	q.Set("skipped", strconv.Itoa(skipped))

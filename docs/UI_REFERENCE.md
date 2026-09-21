@@ -2,6 +2,8 @@
 
 This document defines the canonical visual system for the local LinkedIn Job CLI web application.
 
+The September 2026 workflow review is documented in [UI_UX_REVIEW.md](./UI_UX_REVIEW.md). Its implemented navigation, responsive layouts, action hierarchy and accessibility refinements supersede the historical dashboard email-preview layout while retaining this visual language.
+
 ## Master reference
 
 ![Full Application UI Reference](./ui-reference/full-application-ui-reference.svg)
@@ -20,8 +22,8 @@ The UI implementation should contain these screens in this order:
 
 1. **Dashboard**
    - KPI cards: Jobs Collected, With Email Contact, Application Pipeline, Applications Sent.
-   - Recent Jobs table.
-   - Selected Application Detail panel.
+   - Recent Jobs table with job/company/status scanning.
+   - Next actions panel: email review, preparation, manual Easy Apply, approved work and destination problems.
    - Quick Actions.
    - Primary action: Collect New Jobs.
 

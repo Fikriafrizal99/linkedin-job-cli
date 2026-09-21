@@ -22,20 +22,20 @@ const (
 )
 
 type jobProcessResult struct {
-	Selected       int
-	Queued         int
-	Prepared       int
-	DraftCreated   int
-	ExistingDrafts  int
-	EasyApplyQueued int
+	Selected          int
+	Queued            int
+	Prepared          int
+	DraftCreated      int
+	ExistingDrafts    int
+	EasyApplyQueued   int
 	EasyApplyExisting int
-	NeedReview      int
-	NonEmailSkipped int
-	Skipped         int
-	Failed         int
-	ReviewIDs      []string
-	EasyApplyIDs   []string
-	FirstErr       error
+	NeedReview        int
+	NonEmailSkipped   int
+	Skipped           int
+	Failed            int
+	ReviewIDs         []string
+	EasyApplyIDs      []string
+	FirstErr          error
 }
 
 type jobDraftCreator func(context.Context, appengine.DraftPayload) (gmailclient.DraftResult, error)
@@ -358,10 +358,12 @@ func redirectJobBulkResult(w http.ResponseWriter, r *http.Request, action string
 		q.Set("job_process_error", msg)
 	}
 	for formKey, queryKey := range map[string]string{
-		"filter_q": "q",
+		"filter_q":        "q",
 		"filter_location": "location",
-		"filter_method": "method",
-		"filter_state": "state",
+		"filter_method":   "method",
+		"filter_state":    "state",
+		"filter_since":    "since",
+		"filter_page":     "page",
 	} {
 		if v := strings.TrimSpace(r.PostFormValue(formKey)); v != "" {
 			q.Set(queryKey, v)

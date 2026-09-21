@@ -70,7 +70,7 @@ func TestApplicationWorkbenchRendersBulkActions(t *testing.T) {
 		"formaction=\"/app/applications/send-confirm\"",
 		"href=\"/app/applications/review\"",
 		"name=\"attachment\" value=\"portfolio-1\" checked",
-		"PREPARED",
+		"Create Gmail draft",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("workbench missing %q", want)

@@ -224,7 +224,7 @@ func TestCollectUIRendersRealPostAction(t *testing.T) {
 		`name="keywords"`,
 		`name="top"`,
 		`id="collect-submit"`,
-		"Anonymous public collection only",
+		"Collect up to 100 public job listings",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("collect UI missing %q", want)
@@ -486,7 +486,7 @@ func TestApplicationDetailRendersPrepareFormForReadyEmail(t *testing.T) {
 		`action="/app/applications/50003/prepare"`,
 		`name="csrf" value="csrf-prepare"`,
 		`name="cv_profile"`,
-		"Auto (deterministic)",
+		"Auto · match by keywords",
 		"Prepare Application",
 		"does not create a Gmail draft",
 	} {
@@ -513,7 +513,7 @@ func TestApplicationDetailBlocksPrepareForNeedReview(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	if strings.Contains(out, "/prepare") || !strings.Contains(out, "Recipient/email is not confirmed") {
+	if strings.Contains(out, "/prepare") || !strings.Contains(out, "No verified email recipient is available") {
 		t.Fatalf("NEED_REVIEW should block prepare: %s", out)
 	}
 }
