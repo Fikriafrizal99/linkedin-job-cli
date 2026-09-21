@@ -72,7 +72,9 @@ var applicationsQueueCmd = &cobra.Command{
 			for _, j := range all {
 				readyEmail := strings.EqualFold(strings.TrimSpace(j.ApplicationMethod), "EMAIL") &&
 					strings.TrimSpace(j.ApplyEmail) != ""
-				if !readyEmail && !applicationsIncludeReview {
+				method := strings.ToUpper(strings.TrimSpace(j.ApplicationMethod))
+				readyEasyApply := method == "LINKEDIN" || method == "EASY_APPLY"
+				if !readyEmail && !readyEasyApply && !applicationsIncludeReview {
 					continue
 				}
 				jobs = append(jobs, j)
@@ -89,6 +91,7 @@ var applicationsQueueCmd = &cobra.Command{
 
 		queued := 0
 		ready := 0
+		easyApply := 0
 		review := 0
 		var queuedApps []models.JobApplication
 		for _, j := range jobs {
@@ -102,6 +105,8 @@ var applicationsQueueCmd = &cobra.Command{
 			switch a.State {
 			case models.ApplicationStateReadyEmail:
 				ready++
+			case models.ApplicationStateReadyEasyApply:
+				easyApply++
 			case models.ApplicationStateNeedReview:
 				review++
 			}
@@ -116,7 +121,7 @@ var applicationsQueueCmd = &cobra.Command{
 		if jsonOut {
 			return render.AsJSON(os.Stdout, queuedApps)
 		}
-		fmt.Fprintf(os.Stdout, "Queued %d application(s): %d ready email, %d need review.\n", queued, ready, review)
+		fmt.Fprintf(os.Stdout, "Queued %d application(s): %d ready email, %d ready Easy Apply, %d need review.\n", queued, ready, easyApply, review)
 		return nil
 	},
 }
@@ -546,6 +551,15 @@ var applicationsShowCmd = &cobra.Command{
 		if a.GmailThreadID != "" {
 			fmt.Fprintf(os.Stdout, "Gmail thread:%s\n", " "+a.GmailThreadID)
 		}
+		if a.ApplyURL != "" {
+			fmt.Fprintf(os.Stdout, "Apply URL:    %s\n", a.ApplyURL)
+		}
+		if a.OpenedAt != "" {
+			fmt.Fprintf(os.Stdout, "Opened at:    %s\n", a.OpenedAt)
+		}
+		if a.AppliedAt != "" {
+			fmt.Fprintf(os.Stdout, "Applied at:   %s\n", a.AppliedAt)
+		}
 		if a.SentAt != "" {
 			fmt.Fprintf(os.Stdout, "Sent at:     %s\n", a.SentAt)
 		}
@@ -564,7 +578,7 @@ var applicationsShowCmd = &cobra.Command{
 func init() {
 	applicationsQueueCmd.Flags().BoolVar(&applicationsAll, "all", false, "queue a bounded batch of stored jobs")
 	applicationsQueueCmd.Flags().IntVar(&applicationsLimit, "limit", 50, "maximum application records to queue/list")
-	applicationsQueueCmd.Flags().BoolVar(&applicationsIncludeReview, "include-review", false, "with --all, also queue non-email jobs as NEED_REVIEW")
+	applicationsQueueCmd.Flags().BoolVar(&applicationsIncludeReview, "include-review", false, "with --all, also queue unsupported jobs as NEED_REVIEW; Easy Apply is included by default")
 
 	applicationsPrepareCmd.Flags().BoolVar(&applicationsPrepareAll, "all", false, "prepare a bounded batch of READY_EMAIL applications")
 	applicationsPrepareCmd.Flags().IntVar(&applicationsLimit, "limit", 50, "maximum application records to prepare")
