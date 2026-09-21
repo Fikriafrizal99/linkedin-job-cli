@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS applications (
     body TEXT,
     cv_profile TEXT,
     gmail_draft_id TEXT,
+    gmail_message_id TEXT,
+    gmail_thread_id TEXT,
     last_error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -63,6 +65,8 @@ func migrateApplications(db *sql.DB) error {
 	}{
 		{"reviewed_at", "TEXT"},
 		{"review_note", "TEXT"},
+		{"gmail_message_id", "TEXT"},
+		{"gmail_thread_id", "TEXT"},
 	} {
 		if existing[c.name] {
 			continue
@@ -291,10 +295,57 @@ WHERE job_id=?
 	return s.GetApplicationByJobID(jobID)
 }
 
+// MarkApplicationSent records the Gmail provider identifiers only after the
+// approved draft has been explicitly sent by the external provider.
+func (s *Store) MarkApplicationSent(jobID, messageID, threadID string) (*models.JobApplication, error) {
+	jobID = strings.TrimSpace(jobID)
+	messageID = strings.TrimSpace(messageID)
+	threadID = strings.TrimSpace(threadID)
+	if jobID == "" {
+		return nil, fmt.Errorf("empty job id")
+	}
+	if messageID == "" {
+		return nil, fmt.Errorf("empty Gmail message id")
+	}
+
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State == models.ApplicationStateSent {
+		if existing.GmailMessageID == messageID &&
+			(threadID == "" || existing.GmailThreadID == threadID) {
+			return existing, nil
+		}
+		return nil, fmt.Errorf("application for job %s is already SENT as Gmail message %s", jobID, existing.GmailMessageID)
+	}
+	if existing.State != models.ApplicationStateApproved {
+		return nil, fmt.Errorf("application state is %s; expected APPROVED", existing.State)
+	}
+	if strings.TrimSpace(existing.GmailDraftID) == "" {
+		return nil, fmt.Errorf("application has no Gmail draft id")
+	}
+
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications
+SET state=?, gmail_message_id=?, gmail_thread_id=?, sent_at=?, updated_at=?, last_error=''
+WHERE job_id=?
+`,
+		models.ApplicationStateSent, messageID, threadID, now, now, jobID); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(jobID)
+}
+
 func (s *Store) GetApplicationByJobID(jobID string) (*models.JobApplication, error) {
 	row := s.db.QueryRow(`
 SELECT id,job_id,state,COALESCE(recipient,''),COALESCE(subject,''),
        COALESCE(body,''),COALESCE(cv_profile,''),COALESCE(gmail_draft_id,''),
+       COALESCE(gmail_message_id,''),COALESCE(gmail_thread_id,''),
        COALESCE(last_error,''),created_at,updated_at,
        COALESCE(draft_created_at,''),COALESCE(reviewed_at,''),
        COALESCE(review_note,''),COALESCE(sent_at,'')
@@ -307,6 +358,7 @@ func (s *Store) ListApplications(state string, limit int) ([]models.JobApplicati
 	q := `
 SELECT id,job_id,state,COALESCE(recipient,''),COALESCE(subject,''),
        COALESCE(body,''),COALESCE(cv_profile,''),COALESCE(gmail_draft_id,''),
+       COALESCE(gmail_message_id,''),COALESCE(gmail_thread_id,''),
        COALESCE(last_error,''),created_at,updated_at,
        COALESCE(draft_created_at,''),COALESCE(reviewed_at,''),
        COALESCE(review_note,''),COALESCE(sent_at,'')
@@ -345,8 +397,9 @@ func scanApplication(row scanner) (*models.JobApplication, error) {
 	var a models.JobApplication
 	if err := row.Scan(
 		&a.ID, &a.JobID, &a.State, &a.Recipient, &a.Subject,
-		&a.Body, &a.CVProfile, &a.GmailDraftID, &a.LastError,
-		&a.CreatedAt, &a.UpdatedAt, &a.DraftCreatedAt, &a.ReviewedAt,
+		&a.Body, &a.CVProfile, &a.GmailDraftID, &a.GmailMessageID,
+		&a.GmailThreadID, &a.LastError, &a.CreatedAt, &a.UpdatedAt,
+		&a.DraftCreatedAt, &a.ReviewedAt,
 		&a.ReviewNote, &a.SentAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
