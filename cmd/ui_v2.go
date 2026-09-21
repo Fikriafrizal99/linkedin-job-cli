@@ -261,7 +261,9 @@ func (ws *webServer) handleAppPrepareApplication(w http.ResponseWriter, r *http.
 		redirectApplicationAction(w, r, jobID, fmt.Errorf("CV profile id is too long"))
 		return
 	}
+	ws.lifecycleMu.Lock()
 	a, err := prepareApplicationForUI(ws.st, jobID, settings.Application, override)
+	ws.lifecycleMu.Unlock()
 	if err != nil {
 		redirectApplicationAction(w, r, jobID, err)
 		return
@@ -1150,7 +1152,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
         <div class="info-row"><span>Status</span>{{if .GmailConnected}}<span class="badge state-approved">CONNECTED</span>{{else}}<span class="badge state-need_review">NOT CONNECTED</span>{{end}}</div>
         <div class="field-label">OAuth credentials file</div><div class="field">{{.GmailCredentialsPath}}</div>
         <div class="field-label">OAuth token file</div><div class="field">{{.GmailTokenPath}}</div>
-        <div class="info-row"><span>OAuth scope</span><b>gmail.compose</b></div><div class="info-row"><span>Draft creation</span><b>Explicit</b></div><div class="info-row"><span>Automatic send</span><b>Disabled</b></div>
+        <div class="info-row"><span>OAuth scope</span><b>gmail.compose</b></div><div class="info-row"><span>Draft creation</span><b>Explicit</b></div><div class="info-row"><span>Explicit send</span><b>After APPROVED + final confirmation</b></div><div class="info-row"><span>Automatic send</span><b>Disabled</b></div>
         {{if .GmailConnected}}
           <form method="post" action="/app/gmail/disconnect" style="margin-top:14px"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn ghost" type="submit">Disconnect Gmail</button></form>
         {{else if .GmailCredentialsFound}}
