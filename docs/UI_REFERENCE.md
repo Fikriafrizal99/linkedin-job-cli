@@ -171,6 +171,25 @@ The visual design must be backed by the existing repository workflow rather than
 - Responsive behavior may reflow panels on smaller screens, but desktop is the primary reference.
 - Real application state must replace mock labels/content during implementation.
 
+## Implementation status
+
+### Phase 1 — complete
+
+The repository now contains the first implementation of the complete page family under the existing `serve` command:
+
+- `/app/dashboard`
+- `/app/jobs`
+- `/app/jobs/<job_id>`
+- `/app/applications`
+- `/app/applications/<job_id>`
+- `/app/cv-profiles`
+- `/app/collect`
+- `/app/settings`
+
+Dashboard, Jobs, Applications, CV Profiles, and Settings are populated from the existing SQLite/config data. Application send/review buttons and collector execution remain intentionally disabled in this UI phase until their POST endpoints are wired to the already-tested lifecycle guards.
+
+The former server-rendered jobs browser is retained at `/legacy` during migration so existing filtering/status/delete regression coverage is not discarded.
+
 ## Reference assets
 
 - Detailed Dashboard: `docs/ui-reference/job-command-center.webp`
