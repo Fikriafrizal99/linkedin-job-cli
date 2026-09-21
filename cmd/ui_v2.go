@@ -896,11 +896,11 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
           <div class="info-row"><span>Pipeline State</span><span class="badge state-{{lower .SelectedApplication.State}}">{{.SelectedApplication.State}}</span></div>
           <a class="btn primary" style="display:block;text-align:center;margin-top:12px" href="/app/applications/{{.SelectedJob.ID}}">View Application</a>
         {{else}}
-          <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/queue" style="margin-top:12px">
+          <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/queue" style="margin-top:12px" {{if not (and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail)}}onsubmit="return confirm('This job has no explicit application email. Queue it as NEED_REVIEW anyway?')"{{end}}>
             <input type="hidden" name="csrf" value="{{.CSRF}}">
-            <button class="btn primary" type="submit" style="width:100%">Queue Application</button>
+            <button class="btn primary" type="submit" style="width:100%">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}Queue Application{{else}}Queue as NEED_REVIEW{{end}}</button>
           </form>
-          <div class="footer-note">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}This job will enter READY_EMAIL.{{else}}No explicit email detected; this job will enter NEED_REVIEW.{{end}}</div>
+          <div class="footer-note">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}This job will enter READY_EMAIL.{{else}}No explicit email detected. This is an optional manual-review path and requires confirmation.{{end}}</div>
         {{end}}
         {{if .SelectedJob.ApplyURL}}<a class="btn ghost" style="display:block;text-align:center;margin-top:8px" target="_blank" rel="noreferrer" href="{{.SelectedJob.ApplyURL}}">Open Apply URL ↗</a>{{end}}</div></aside>
       </section>
