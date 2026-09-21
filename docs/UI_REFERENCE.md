@@ -236,7 +236,7 @@ After queueing, the UI redirects to Application Detail for the queued job. Job D
 
 `NEED_REVIEW` is now surfaced in application filters, pipeline counts, and status badges. The queue action has been live-validated in the user's local browser with both READY_EMAIL and NEED_REVIEW records visible in the application pipeline.
 
-### Prepare Application — implemented, pending live validation
+### Prepare Application — live validated
 
 Application Detail now exposes a real preparation action for `READY_EMAIL` records:
 
@@ -256,7 +256,37 @@ It delegates to the existing deterministic Application Engine:
 - no email is sent;
 - `NEED_REVIEW` records are blocked until recipient/contact data is resolved.
 
-Re-preparation remains available while a record is still `READY_EMAIL`. Once it reaches `DRAFT_CREATED`, `APPROVED`, or `SENT`, existing backend lifecycle guards prevent silent re-preparation.
+Re-preparation remains available while a record is still `READY_EMAIL`. Once it reaches `DRAFT_CREATED`, `APPROVED`, or `SENT`, existing backend lifecycle guards prevent silent re-preparation. The prepare action has been live-validated in the user's local browser.
+
+### Native Gmail Draft — implemented, pending live validation
+
+The local web application now supports native Gmail OAuth and draft creation without depending on the ChatGPT Gmail connector.
+
+Routes:
+
+```text
+POST /app/gmail/connect
+GET  /app/gmail/oauth/callback
+POST /app/gmail/disconnect
+POST /app/applications/<job_id>/draft
+```
+
+Implementation boundaries:
+
+- OAuth Desktop/loopback flow with PKCE and state;
+- minimum Gmail scope: `gmail.compose`;
+- credentials default to `~/.linkedin-jobs/gmail-credentials.json`;
+- tokens default to `~/.linkedin-jobs/gmail-token.json` and are forced to `0600`;
+- access tokens are refreshed using the stored refresh token;
+- Gmail draft content is RFC/MIME with the configured CV attached;
+- Gmail API `drafts.create` is called only from an explicit user action;
+- successful Gmail draft IDs are persisted through `MarkApplicationDraftCreated`;
+- state advances from `READY_EMAIL` to `DRAFT_CREATED`;
+- no send occurs;
+- the UI blocks draft creation if the selected CV file is missing;
+- Gmail OAuth is restricted to a local loopback host.
+
+See `docs/GMAIL_SETUP.md` for setup instructions.
 
 ## Reference assets
 
