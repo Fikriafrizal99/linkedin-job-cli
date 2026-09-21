@@ -920,11 +920,11 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
               <span id="selected-jobs-count" class="batch-note">0 selected</span>
             </div>
             <div class="bulk-actions">
-              <button class="btn ghost" type="submit" formaction="/app/jobs/bulk/queue">Queue Selected</button>
-              <button class="btn primary" type="submit" formaction="/app/jobs/bulk/process-to-draft" {{if not .GmailConnected}}disabled title="Connect Gmail first"{{end}}>Process Selected to Draft</button>
+              <button class="btn ghost" id="queue-selected-jobs" type="submit" formaction="/app/jobs/bulk/queue">Queue Selected</button>
+              <button class="btn primary" id="process-selected-jobs" data-gmail="{{if .GmailConnected}}1{{else}}0{{end}}" type="submit" formaction="/app/jobs/bulk/process-to-draft" {{if not .GmailConnected}}disabled title="Connect Gmail first"{{end}}>Process Selected to Draft</button>
             </div>
           </div>
-          <div class="bulk-hint">Process Selected to Draft runs Queue → deterministic Prepare → Gmail Draft, then opens the resulting DRAFT_CREATED records in Review Queue. It never approves or sends email. Jobs without an explicit application email stop at NEED_REVIEW.</div>
+          <div class="bulk-hint">Queue Selected supports up to 50 jobs. Process Selected to Draft supports up to 25 and runs Queue → deterministic Prepare → Gmail Draft, then opens the resulting DRAFT_CREATED records in Review Queue. It never approves or sends email. Jobs without an explicit application email stop at NEED_REVIEW.</div>
           {{if not .GmailConnected}}<div class="bulk-hint">Gmail is not connected, so Process Selected to Draft is disabled. Queue Selected remains available.</div>{{end}}
           {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for created drafts:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
         </div>
@@ -1273,11 +1273,14 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   function updateSelected(){var n=appChecks.filter(function(x){return x.checked}).length;if(selectedCount)selectedCount.textContent=n+' selected';if(selectAll){selectAll.checked=n>0&&n===appChecks.length;selectAll.indeterminate=n>0&&n<appChecks.length;}appChecks.forEach(function(x){var row=x.closest('tr');if(row)row.classList.toggle('row-selected',x.checked);});}
   if(selectAll){selectAll.addEventListener('change',function(){appChecks.forEach(function(x){x.checked=selectAll.checked});updateSelected();});}
   appChecks.forEach(function(x){x.addEventListener('change',updateSelected)});updateSelected();
-  var selectAllJobs=document.getElementById('select-all-jobs'), jobChecks=Array.prototype.slice.call(document.querySelectorAll('.js-job-check')), selectedJobsCount=document.getElementById('selected-jobs-count');
+  var selectAllJobs=document.getElementById('select-all-jobs'), jobChecks=Array.prototype.slice.call(document.querySelectorAll('.js-job-check')), selectedJobsCount=document.getElementById('selected-jobs-count'), queueJobsBtn=document.getElementById('queue-selected-jobs'), processJobsBtn=document.getElementById('process-selected-jobs');
   function updateSelectedJobs(){
     var n=jobChecks.filter(function(x){return x.checked}).length;
-    if(selectedJobsCount)selectedJobsCount.textContent=n+' selected';
+    var processLimit=n>25, queueLimit=n>50, gmailOK=!processJobsBtn||processJobsBtn.getAttribute('data-gmail')==='1';
+    if(selectedJobsCount)selectedJobsCount.textContent=n+' selected'+(processLimit?' · Process max 25':'');
     if(selectAllJobs){selectAllJobs.checked=n>0&&n===jobChecks.length;selectAllJobs.indeterminate=n>0&&n<jobChecks.length;}
+    if(queueJobsBtn){queueJobsBtn.disabled=n===0||queueLimit;queueJobsBtn.title=queueLimit?'Select at most 50 jobs':'';}
+    if(processJobsBtn){processJobsBtn.disabled=n===0||processLimit||!gmailOK;processJobsBtn.title=!gmailOK?'Connect Gmail first':(processLimit?'Select at most 25 jobs':'');}
     jobChecks.forEach(function(x){var row=x.closest('tr');if(row)row.classList.toggle('row-selected',x.checked);});
   }
   if(selectAllJobs){selectAllJobs.addEventListener('change',function(){jobChecks.forEach(function(x){x.checked=selectAllJobs.checked});updateSelectedJobs();});}
