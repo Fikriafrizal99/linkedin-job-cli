@@ -820,7 +820,7 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
               <div class="alert" style="margin-top:12px">Gmail is not connected. <a class="job-link" href="/app/settings?tab=email">Connect Gmail in Settings</a> before creating a draft.</div>
             {{end}}
           {{else}}
-            <div class="footer-note">Prepare the application first. This only stores subject/body + CV profile and does not send email.</div>
+            <div class="footer-note">Prepare the application first. This only stores subject/body + CV profile; it does not create a Gmail draft or send email.</div>
           {{end}}
         {{else if eq .SelectedApplication.State "NEED_REVIEW"}}
           <div class="alert" style="margin-top:16px">Recipient/email is not confirmed. Resolve the application contact before preparing this record.</div>
