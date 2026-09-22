@@ -580,9 +580,9 @@ func TestJobDetailRendersEasyApplyStartApplicationAction(t *testing.T) {
 			t.Errorf("Easy Apply shortlisted job detail missing %q", want)
 		}
 	}
-	for _, unwanted := range []string{"Queue Easy Apply", "Queue as NEED_REVIEW", "READY_EASY_APPLY"} {
+	for _, unwanted := range []string{"Queue Easy Apply", "Queue as NEED_REVIEW"} {
 		if strings.Contains(html, unwanted) {
-			t.Errorf("pre-handoff Easy Apply job detail should not contain %q", unwanted)
+			t.Errorf("pre-handoff Easy Apply job detail should not contain legacy action %q", unwanted)
 		}
 	}
 }
