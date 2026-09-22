@@ -26,6 +26,7 @@ func (ws *webServer) handleAppSetJobReviewState(w http.ResponseWriter, r *http.R
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	ws.removeSelectedJobs([]string{id})
 
 	target := strings.TrimSpace(r.PostFormValue("return_url"))
 	if target == "" || !strings.HasPrefix(target, "/app/") {
@@ -59,14 +60,19 @@ func (ws *webServer) handleAppBulkReviewState(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	seen := map[string]bool{}
-	ids := make([]string, 0, len(r.PostForm["job_id"]))
+	scope := normalizedJobSelectionScope(jobSelectionValuesFromPost(r))
+	seen := ws.selectedJobsForScope(scope)
+	if seen == nil {
+		seen = map[string]bool{}
+	}
 	for _, id := range r.PostForm["job_id"] {
 		id = strings.TrimSpace(id)
-		if id == "" || seen[id] {
-			continue
+		if id != "" {
+			seen[id] = true
 		}
-		seen[id] = true
+	}
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
 		ids = append(ids, id)
 	}
 	if len(ids) == 0 {
@@ -75,6 +81,9 @@ func (ws *webServer) handleAppBulkReviewState(w http.ResponseWriter, r *http.Req
 	}
 
 	updated, err := ws.st.BulkSetJobReviewState(ids, state, reason)
+	if err == nil {
+		ws.removeSelectedJobs(ids)
+	}
 	redirectJobTriageResult(w, r, state, updated, err)
 }
 
