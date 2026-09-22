@@ -98,7 +98,31 @@ func runCollectBatch(plan collectPlan, st *store.Store, progress collectProgress
 	if len(plan.Requests) == 0 {
 		return nil, fmt.Errorf("at least one search combination is required")
 	}
-	result := &collectRunResult{SearchRuns: len(plan.Requests)}
+	postedWithin := ""
+	if len(plan.Requests) > 0 {
+		postedWithin = plan.Requests[0].PostedWithin
+	}
+	runID, err := st.CreateCollectionRun(plan.Queries, plan.Locations, postedWithin)
+	if err != nil {
+		return nil, fmt.Errorf("create collection run: %w", err)
+	}
+	result := &collectRunResult{RunID: runID, SearchRuns: len(plan.Requests)}
+	finishRun := func(status string, runErr error) {
+		errText := ""
+		if runErr != nil {
+			errText = runErr.Error()
+		}
+		_ = st.FinishCollectionRun(runID, store.CollectionRunFinish{
+			SearchRuns: result.SearchRuns,
+			SearchedCount: result.Searched,
+			NewCount: result.NewCandidates,
+			PersistedCount: result.Persisted,
+			ExactDuplicateCount: result.ExactDuplicates,
+			LikelyRepostCount: result.LikelyReposts,
+			Status: status,
+			Error: errText,
+		})
+	}
 	seenJobs := map[string]bool{}
 	for i, req := range plan.Requests {
 		if progress != nil {
@@ -110,7 +134,9 @@ func runCollectBatch(plan collectPlan, st *store.Store, progress collectProgress
 			if location == "" {
 				location = "all locations"
 			}
-			return result, fmt.Errorf("search %d/%d failed for %q @ %q: %w", i+1, len(plan.Requests), req.Keywords, location, err)
+			runErr := fmt.Errorf("search %d/%d failed for %q @ %q: %w", i+1, len(plan.Requests), req.Keywords, location, err)
+			finishRun("FAILED", runErr)
+			return result, runErr
 		}
 		result.Searched += part.Searched
 		result.NewCandidates += part.NewCandidates
@@ -118,6 +144,20 @@ func runCollectBatch(plan collectPlan, st *store.Store, progress collectProgress
 		result.ExactDuplicates += part.ExactDuplicates
 		result.LikelyReposts += part.LikelyReposts
 		result.JobIDs = append(result.JobIDs, part.JobIDs...)
+		for _, id := range part.JobIDs {
+			classification := ""
+			for _, job := range part.Jobs {
+				if job != nil && job.ID == id {
+					classification = job.DuplicateClassification
+					break
+				}
+			}
+			if err := st.AddCollectionRunJob(runID, id, classification, true); err != nil {
+				runErr := fmt.Errorf("record collection run job %s: %w", id, err)
+				finishRun("FAILED", runErr)
+				return result, runErr
+			}
+		}
 		for _, job := range part.Jobs {
 			if job == nil || seenJobs[job.ID] {
 				continue
@@ -128,6 +168,17 @@ func runCollectBatch(plan collectPlan, st *store.Store, progress collectProgress
 		if progress != nil {
 			progress("batch", i+1, len(plan.Requests))
 		}
+	}
+	if err := st.FinishCollectionRun(runID, store.CollectionRunFinish{
+		SearchRuns: result.SearchRuns,
+		SearchedCount: result.Searched,
+		NewCount: result.NewCandidates,
+		PersistedCount: result.Persisted,
+		ExactDuplicateCount: result.ExactDuplicates,
+		LikelyRepostCount: result.LikelyReposts,
+		Status: "COMPLETED",
+	}); err != nil {
+		return result, fmt.Errorf("finish collection run: %w", err)
 	}
 	return result, nil
 }
