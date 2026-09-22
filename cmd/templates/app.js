@@ -64,6 +64,8 @@
   var jobForm = byId('bulk-jobs-form');
   var jobCount = byId('selected-jobs-count');
   var jobSelectionTotal = jobCount ? parseInt(jobCount.dataset.selectedCount || '0', 10) || 0 : 0;
+  var jobSelectionPending = Promise.resolve();
+  var resumeJobSubmit = false;
 
   function jobSelectionPayload(action, ids, selected) {
     var data = new URLSearchParams();
@@ -80,26 +82,29 @@
 
   function persistJobSelection(action, ids, selected) {
     if (!jobForm) return Promise.resolve(null);
-    return fetch('/app/jobs/selection', {
+    jobSelectionPending = jobSelectionPending.catch(function () { return null; }).then(function () {
+      return fetch('/app/jobs/selection', {
       method: 'POST',
       headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
-      body: jobSelectionPayload(action, ids, selected).toString()
-    }).then(function (r) {
-      return r.json().then(function (data) {
-        if (!r.ok || !data.ok) throw new Error(data.error || 'Selection update failed');
-        jobSelectionTotal = data.count || 0;
-        if (jobCount) {
-          jobCount.dataset.selectedCount = String(jobSelectionTotal);
-          jobCount.textContent = jobSelectionTotal + ' selected across pages';
-        }
-        syncJobs();
-        return data;
+        body: jobSelectionPayload(action, ids, selected).toString()
+      }).then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok || !data.ok) throw new Error(data.error || 'Selection update failed');
+          jobSelectionTotal = data.count || 0;
+          if (jobCount) {
+            jobCount.dataset.selectedCount = String(jobSelectionTotal);
+            jobCount.textContent = jobSelectionTotal + ' selected across pages';
+          }
+          syncJobs();
+          return data;
+        });
+      }).catch(function (err) {
+        var detail = byId('jobs-selection-detail');
+        if (detail) detail.textContent = 'Selection could not be saved: ' + err.message;
+        return null;
       });
-    }).catch(function (err) {
-      var detail = byId('jobs-selection-detail');
-      if (detail) detail.textContent = 'Selection could not be saved: ' + err.message;
-      return null;
     });
+    return jobSelectionPending;
   }
 
   var syncJobs = selection(jobs, byId('select-all-jobs'), null, function (selected) {
@@ -133,6 +138,16 @@
   var jobSelectAll = byId('select-all-jobs');
   if (jobSelectAll) jobSelectAll.addEventListener('change', function () {
     persistJobSelection('visible', jobs.map(function (x) { return x.value; }), jobSelectAll.checked);
+  });
+  if (jobForm) jobForm.addEventListener('submit', function (event) {
+    var submitter = event.submitter;
+    if (resumeJobSubmit || !submitter || (!submitter.classList.contains('js-triage-action') && !submitter.classList.contains('selection-control'))) return;
+    event.preventDefault();
+    jobSelectionPending.finally(function () {
+      resumeJobSubmit = true;
+      jobForm.requestSubmit(submitter);
+      resumeJobSubmit = false;
+    });
   });
   var appForm = byId('bulk-app-form');
   var syncApps = selection(all('.js-app-check'), byId('select-all-apps'), byId('selected-count'), function (selected) {
