@@ -527,7 +527,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		}
 	}
 	selectionScope := ""
-	if strings.HasPrefix(r.URL.Path, "/app/jobs") {
+	if strings.TrimSuffix(r.URL.Path, "/") == "/app/jobs" {
 		selectionScope = normalizedJobSelectionScope(r.URL.Query())
 		if ws.syncJobSelectionScope(selectionScope) {
 			pd.SelectionNotice = "Job selection was cleared because the Jobs view or filters changed."
