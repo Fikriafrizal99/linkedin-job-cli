@@ -325,6 +325,9 @@ func redirectCollectPlanResult(w http.ResponseWriter, r *http.Request, plan coll
 		q.Set("persisted", strconv.Itoa(result.Persisted))
 		q.Set("exact", strconv.Itoa(result.ExactDuplicates))
 		q.Set("reposts", strconv.Itoa(result.LikelyReposts))
+		if result.RunID > 0 {
+			q.Set("run_id", strconv.FormatInt(result.RunID, 10))
+		}
 	}
 	http.Redirect(w, r, "/app/collect?"+q.Encode(), http.StatusSeeOther)
 }
@@ -350,6 +353,9 @@ func redirectCollectResult(w http.ResponseWriter, r *http.Request, req collectRe
 		q.Set("persisted", strconv.Itoa(result.Persisted))
 		q.Set("exact", strconv.Itoa(result.ExactDuplicates))
 		q.Set("reposts", strconv.Itoa(result.LikelyReposts))
+		if result.RunID > 0 {
+			q.Set("run_id", strconv.FormatInt(result.RunID, 10))
+		}
 	}
 	http.Redirect(w, r, "/app/collect?"+q.Encode(), http.StatusSeeOther)
 }
