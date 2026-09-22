@@ -115,7 +115,7 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 		Title: "Jobs", Subtitle: "Database workbench", Active: "jobs", CSRF: "csrf",
 		CandidateName: "Candidate", CandidateInitials: "C", GmailConnected: true,
 		Query: "sales", LocationFilter: "Jakarta", ReviewFilter: models.JobReviewShortlisted,
-		SelectedJobsCount: 2, SelectedEmailCount: 1, SelectedOtherCount: 1, SelectableJobsCount: 2,
+		SelectedJobsCount: 2, SelectedEmailCount: 1, SelectedOtherCount: 1,
 		Jobs: []appJobRow{
 			{ID: "101", Title: "Sales Executive", Company: "Example", Location: "Jakarta", Method: "EMAIL", State: "NOT_APPLIED", Email: "jobs@example.com", ReviewState: models.JobReviewShortlisted, Selected: true},
 			{ID: "102", Title: "Account Executive", Company: "Review", Location: "Bogor", Method: "UNKNOWN", State: "NOT_APPLIED", ReviewState: models.JobReviewShortlisted, Selected: true},
@@ -137,31 +137,6 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 		"Unsupported destination · skipped by default",
 	} {
 		if !strings.Contains(html, want) { t.Errorf("Jobs bulk UI missing %q", want) }
-	}
-}
-
-func TestShortlistedActiveApplicationRendersContinueInsteadOfBulkSelection(t *testing.T) {
-	tpl, err := newAppTemplate()
-	if err != nil { t.Fatal(err) }
-	var b strings.Builder
-	if err := tpl.Execute(&b, appPageData{
-		Title: "Shortlisted", Active: "jobs", CandidateName: "Candidate", CandidateInitials: "C",
-		ReviewFilter: models.JobReviewShortlisted,
-		SelectableJobsCount: 0,
-		Jobs: []appJobRow{{
-			ID: "101", Title: "Sales Specialist", Method: "EMAIL",
-			State: models.ApplicationStateApproved, ReviewState: models.JobReviewShortlisted,
-		}},
-	}); err != nil { t.Fatal(err) }
-	html := b.String()
-	if strings.Contains(html, `class="row-check js-job-check" type="checkbox" name="job_id" value="101"`) {
-		t.Fatal("shortlisted job already in application pipeline must not remain bulk-selectable")
-	}
-	if !strings.Contains(html, `href="/app/applications/101"`) || !strings.Contains(html, "Continue →") {
-		t.Fatal("active shortlisted application should expose Continue action")
-	}
-	if !strings.Contains(html, "All shortlisted jobs in this view are already in the application pipeline") {
-		t.Fatal("shortlisted view should explain why no bulk handoff is available")
 	}
 }
 
