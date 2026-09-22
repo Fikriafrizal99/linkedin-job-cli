@@ -156,6 +156,19 @@ func TestUIBrowserWorkflows(t *testing.T) {
 	check(`document.querySelector('.badge').title === 'APPLIED'`)
 	nav("/app/settings?tab=email")
 	check(`document.getElementById('settings-email').classList.contains('active') && !document.querySelector('input[readonly]')`)
+
+	// Exercise the real browser triage path end-to-end:
+	// checkbox -> persisted selection -> Shortlist POST -> job leaves Inbox.
+	nav("/app/jobs")
+	var triageID string
+	run(chromedp.Evaluate(`document.querySelector('.js-job-check').value`, &triageID))
+	eval(`document.querySelector('.js-job-check').click()`)
+	wait(`document.getElementById('selected-jobs-count').textContent.includes('1 selected across pages')`)
+	eval(`document.querySelector('button.js-triage-action[value="SHORTLISTED"]').click()`)
+	wait(`location.search.includes('triage=SHORTLISTED') && location.search.includes('updated=1')`)
+	check(fmt.Sprintf(`!document.querySelector('.js-job-check[value="%s"]')`, triageID))
+	nav("/app/jobs?review=SHORTLISTED")
+	check(fmt.Sprintf(`!!document.querySelector('.js-job-check[value="%s"]')`, triageID))
 	eval(`document.querySelector('.mobile-menu summary').click()`)
 	check(`document.querySelector('.mobile-menu').open && document.querySelector('.mobile-menu a[href="/app/jobs"]') !== null`)
 	run(chromedp.KeyEvent(kb.Escape))
