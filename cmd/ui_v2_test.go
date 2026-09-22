@@ -387,10 +387,10 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("execute fresh detail: %v", err)
 	}
-	if !strings.Contains(fresh.String(), `action="/app/jobs/12345/queue"`) ||
-		!strings.Contains(fresh.String(), "Queue Email Application") ||
+	if !strings.Contains(fresh.String(), `action="/app/jobs/12345/start-application"`) ||
+		!strings.Contains(fresh.String(), "Start Application") ||
 		!strings.Contains(fresh.String(), "Shortlisted") {
-		t.Fatalf("shortlisted job detail missing compatibility queue UI: %s", fresh.String())
+		t.Fatalf("shortlisted job detail missing Start Application UI: %s", fresh.String())
 	}
 
 	var queued bytes.Buffer
@@ -403,7 +403,7 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 		t.Fatalf("execute queued detail: %v", err)
 	}
 	if !strings.Contains(queued.String(), "View Application") ||
-		strings.Contains(queued.String(), "Queue Email Application") {
+		strings.Contains(queued.String(), "Start Application") {
 		t.Fatalf("queued job detail should show view action only")
 	}
 }
