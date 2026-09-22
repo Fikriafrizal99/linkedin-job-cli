@@ -509,16 +509,18 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd.LocationFilter = strings.TrimSpace(r.URL.Query().Get("location"))
 	pd.MethodFilter = strings.TrimSpace(r.URL.Query().Get("method"))
 	pd.StateFilter = strings.TrimSpace(r.URL.Query().Get("state"))
-	pd.ReviewFilter = strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("review")))
-	if pd.ReviewFilter == "" {
-		pd.ReviewFilter = models.JobReviewUnreviewed
-	}
-	if pd.ReviewFilter != "ALL" {
-		if normalized, ok := models.NormalizeJobReviewState(pd.ReviewFilter); ok {
-			pd.ReviewFilter = normalized
-		} else {
+	if strings.HasPrefix(r.URL.Path, "/app/jobs") {
+		pd.ReviewFilter = strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("review")))
+		if pd.ReviewFilter == "" {
 			pd.ReviewFilter = models.JobReviewUnreviewed
-			pd.ActionError = "Unknown Jobs view. Showing Inbox instead."
+		}
+		if pd.ReviewFilter != "ALL" {
+			if normalized, ok := models.NormalizeJobReviewState(pd.ReviewFilter); ok {
+				pd.ReviewFilter = normalized
+			} else {
+				pd.ReviewFilter = models.JobReviewUnreviewed
+				pd.ActionError = "Unknown Jobs view. Showing Inbox instead."
+			}
 		}
 	}
 	pd.SinceFilter = strings.TrimSpace(r.URL.Query().Get("since"))
