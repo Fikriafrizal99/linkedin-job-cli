@@ -114,7 +114,7 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 	pd := appPageData{
 		Title: "Jobs", Subtitle: "Database workbench", Active: "jobs", CSRF: "csrf",
 		CandidateName: "Candidate", CandidateInitials: "C", GmailConnected: true,
-		Query: "sales", LocationFilter: "Jakarta",
+		Query: "sales", LocationFilter: "Jakarta", ReviewFilter: models.JobReviewShortlisted,
 		Jobs: []appJobRow{
 			{ID: "101", Title: "Sales Executive", Company: "Example", Location: "Jakarta", Method: "EMAIL", State: "NOT_APPLIED", Email: "jobs@example.com"},
 			{ID: "102", Title: "Account Executive", Company: "Review", Location: "Bogor", Method: "UNKNOWN", State: "NOT_APPLIED"},
@@ -140,13 +140,35 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 	}
 }
 
+func TestJobsInboxRendersTriageActions(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil { t.Fatal(err) }
+	var b strings.Builder
+	if err := tpl.Execute(&b, appPageData{
+		Title: "Jobs Inbox", Active: "jobs", CandidateName: "Candidate", CandidateInitials: "C",
+		ReviewFilter: models.JobReviewUnreviewed,
+		Jobs: []appJobRow{{ID: "101", Title: "Sales", Method: "EMAIL", State: "NOT_APPLIED", ReviewState: models.JobReviewUnreviewed}},
+	}); err != nil { t.Fatal(err) }
+	html := b.String()
+	for _, want := range []string{
+		"Shortlist", "Later", "Skip", "formaction=\"/app/jobs/bulk/review-state\"",
+		"Inbox", "Shortlisted", "All Jobs",
+	} {
+		if !strings.Contains(html, want) { t.Errorf("Inbox triage UI missing %q", want) }
+	}
+	if strings.Contains(html, "Process Selected") || strings.Contains(html, "Queue Selected") {
+		t.Fatal("Inbox must not expose application execution actions")
+	}
+}
+
 func TestJobsProcessButtonRemainsAvailableWithoutGmail(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil { t.Fatal(err) }
 	var b strings.Builder
 	if err := tpl.Execute(&b, appPageData{
-		Title: "Jobs", Active: "jobs", CandidateName: "Candidate", CandidateInitials: "C",
-		Jobs: []appJobRow{{ID: "101", Title: "Sales", Method: "EASY_APPLY", State: "NOT_APPLIED"}},
+		Title: "Shortlisted", Active: "jobs", CandidateName: "Candidate", CandidateInitials: "C",
+		ReviewFilter: models.JobReviewShortlisted,
+		Jobs: []appJobRow{{ID: "101", Title: "Sales", Method: "EASY_APPLY", State: "NOT_APPLIED", ReviewState: models.JobReviewShortlisted}},
 	}); err != nil { t.Fatal(err) }
 	html := b.String()
 	if !strings.Contains(html, `formaction="/app/jobs/bulk/process-to-draft"`) ||
