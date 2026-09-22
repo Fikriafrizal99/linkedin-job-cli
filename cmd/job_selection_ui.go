@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"linkedin-jobs/internal/store"
 )
 
-var jobSelectionFilterKeys = []string{"q", "location", "method", "state", "since", "review"}
+var jobSelectionFilterKeys = []string{"q", "location", "method", "state", "since", "review", "run"}
 
 type jobSelectionSummary struct {
 	Count      int
@@ -249,6 +250,18 @@ func (ws *webServer) matchingJobIDs(v url.Values) ([]string, error) {
 		}
 		review = normalized
 	}
+	var runIDs map[string]bool
+	if rawRun := strings.TrimSpace(v.Get("run")); rawRun != "" {
+		runID, parseErr := strconv.ParseInt(rawRun, 10, 64)
+		if parseErr != nil || runID <= 0 {
+			return nil, fmt.Errorf("invalid collection run")
+		}
+		runIDs, err = ws.st.CollectionRunJobIDs(runID, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	since := strings.TrimSpace(v.Get("since"))
 	if since != "" {
 		if _, err := time.Parse("2006-01-02", since); err != nil {
@@ -258,6 +271,9 @@ func (ws *webServer) matchingJobIDs(v url.Values) ([]string, error) {
 
 	ids := make([]string, 0)
 	for _, j := range jobs {
+		if runIDs != nil && !runIDs[j.ID] {
+			continue
+		}
 		if review != "ALL" && !strings.EqualFold(j.ReviewState, review) {
 			continue
 		}
