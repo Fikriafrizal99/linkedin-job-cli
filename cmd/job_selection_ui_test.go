@@ -186,3 +186,50 @@ func TestCrossPageBulkSkipUsesWholeSelection(t *testing.T) {
 		t.Fatalf("skipped rows=%d want 73", skipped.TotalRows)
 	}
 }
+
+func TestVisibleCheckboxStateWinsOverPersistedSelection(t *testing.T) {
+	ws := selectionTestServer(t, 55)
+	postSelection(t, ws, url.Values{
+		"selection_action": {"all"},
+		"filter_review":    {models.JobReviewUnreviewed},
+	})
+
+	page1, err := ws.buildAppPage(httptest.NewRequest(http.MethodGet, "/app/jobs", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{
+		"csrf":          {"token"},
+		"review_state":  {models.JobReviewSkipped},
+		"filter_review": {models.JobReviewUnreviewed},
+	}
+	for _, row := range page1.Jobs {
+		form.Add("visible_job_id", row.ID)
+	}
+	// Simulate one visible checkbox being unchecked immediately before submit.
+	for _, row := range page1.Jobs[1:] {
+		form.Add("job_id", row.ID)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/app/jobs/bulk/review-state", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ws.handleAppBulkReviewState(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status=%d want 303", rec.Code)
+	}
+
+	kept, err := ws.st.Get(page1.Jobs[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.ReviewState != models.JobReviewUnreviewed {
+		t.Fatalf("unchecked visible job was mutated: %q", kept.ReviewState)
+	}
+	skippedCount, err := ws.st.CountJobsByReviewState(models.JobReviewSkipped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skippedCount != 54 {
+		t.Fatalf("skipped=%d want 54", skippedCount)
+	}
+}
