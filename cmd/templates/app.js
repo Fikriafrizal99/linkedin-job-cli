@@ -148,9 +148,6 @@
     // using the larger value avoids a disabled-button race after a click.
     var totalN = Math.max(jobSelectionTotal, selected.length);
     if (jobCount) jobCount.textContent = totalN + ' selected across pages';
-    all('.js-job-action').forEach(function (button) {
-      button.hidden = totalN === 0;
-    });
     all('.js-triage-action').forEach(function (button) {
       button.disabled = totalN === 0;
       button.title = totalN === 0 ? 'Select at least one job' : 'Update all selected jobs, including selections on other pages';
@@ -160,9 +157,6 @@
       startApplications.disabled = totalN === 0;
       startApplications.title = totalN === 0 ? 'Select at least one shortlisted job' : 'Create application records for all selected shortlisted jobs';
     }
-    all('.js-job-selection-options').forEach(function (options) {
-      options.hidden = totalN === 0;
-    });
     if (jobSelectionDetail) {
       jobSelectionDetail.textContent = totalN ? totalN + ' selected across pages · ' + jobSelectedEmail + ' email · ' + jobSelectedEasy + ' Easy Apply · ' + jobSelectedOther + ' needs attention.' : 'Select jobs to update their decision.';
     }
@@ -217,30 +211,22 @@
   var syncApps = selection(all('.js-app-check'), byId('select-all-apps'), byId('selected-count'), function (selected) {
     if (!appForm) return;
     var n = selected.length, gmail = appForm.dataset.gmail === 'true';
-    var countState = function (states) { return selected.filter(function (x) { return states.includes(x.dataset.state); }).length; };
-    var prepareCount = selected.filter(function (x) { return x.dataset.state === 'READY_EMAIL' && x.dataset.prepared !== 'true'; }).length;
-    var draftCount = selected.filter(function (x) { return x.dataset.state === 'READY_EMAIL' && x.dataset.prepared === 'true'; }).length;
-    var eligible = {
-      prepare: prepareCount,
-      draft: draftCount,
-      review: countState(['DRAFT_CREATED']),
-      remove: countState(['READY_EMAIL', 'NEED_REVIEW', 'READY_EASY_APPLY', 'IN_PROGRESS']),
-      'send-confirm': countState(['APPROVED'])
-    };
-    var preferredAction = eligible.prepare ? 'prepare' : eligible.draft && gmail ? 'draft' : eligible.review ? 'review' : eligible['send-confirm'] ? 'send-confirm' : 'remove';
+    var count = function (states, prepared) { return selected.filter(function (x) { return states.includes(x.dataset.state) && (!prepared || x.dataset.prepared === 'true'); }).length; };
+    var eligible = {prepare: count(['READY_EMAIL']), draft: count(['READY_EMAIL'], true), review: count(['DRAFT_CREATED']), remove: count(['READY_EMAIL', 'NEED_REVIEW', 'READY_EASY_APPLY', 'IN_PROGRESS']), 'send-confirm': count(['APPROVED'])};
+    var preferredAction = eligible.prepare > eligible.draft ? 'prepare' : eligible.draft && gmail ? 'draft' : eligible.review ? 'review' : eligible['send-confirm'] ? 'send-confirm' : 'prepare';
     all('button[formaction]', appForm).forEach(function (button) {
       var action = button.getAttribute('formaction').split('/').pop();
       var limit = action === 'draft' || action === 'send-confirm' ? 25 : 50;
       var total = eligible[action] || 0;
-      button.hidden = n === 0 || total === 0;
-      button.disabled = total === 0 || n > limit || (action === 'draft' && !gmail);
+      button.hidden = n > 0 && total === 0;
+      button.disabled = n === 0 || total === 0 || n > limit || (action === 'draft' && !gmail);
       button.title = n > limit ? 'Select at most ' + limit + ' applications' : action === 'draft' && !gmail ? 'Connect Gmail in Settings to create drafts' : total + ' eligible; other selected records will be skipped';
       button.classList.remove('primary');
-      if (!button.hidden && !button.disabled && action === preferredAction) button.classList.add('primary');
+      if (!button.disabled && action === preferredAction) button.classList.add('primary');
     });
-    var counts = n ? eligible.prepare + ' can prepare · ' + eligible.draft + ' can create drafts · ' + eligible.review + ' can review · ' + eligible['send-confirm'] + ' approved.' : 'Select applications to see available actions.';
-    byId('app-selection-detail').textContent = counts + (n > 25 ? ' Draft/send limit: 25 selected. Other actions: 50.' : '') + (eligible.draft && !gmail ? ' Connect Gmail in Settings to create drafts.' : '') + (n && !eligible.prepare && !eligible.draft && !eligible.review && !eligible['send-confirm'] ? ' Continue Easy Apply from the row action, or inspect jobs needing attention.' : '');
-    var attachments = appForm.querySelector('.bulk-attachments'); if (attachments) attachments.hidden = n === 0 || !eligible.draft;
+    var counts = n ? eligible.prepare + ' can prepare · ' + eligible.draft + ' can create drafts · ' + eligible.review + ' can review · ' + eligible['send-confirm'] + ' approved.' : 'Select applications to see eligible actions.';
+    byId('app-selection-detail').textContent = counts + (n > 25 ? ' Draft/send limit: 25 selected. Other actions: 50.' : '') + (eligible.draft && !gmail ? ' Connect Gmail in Settings to create drafts.' : '') + (n && !eligible.prepare && !eligible.review && !eligible['send-confirm'] ? ' Use the Easy Apply queue for manual applications, or inspect jobs needing attention.' : ' Ineligible selected records are skipped.');
+    var attachments = appForm.querySelector('.bulk-attachments'); if (attachments) attachments.hidden = n > 0 && !eligible.draft;
   });
 
   // Gate visual availability on explicit confirmation, without replacing server guards.
