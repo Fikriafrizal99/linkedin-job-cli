@@ -18,9 +18,21 @@ func (ws *webServer) handleAppSetJobReviewState(w http.ResponseWriter, r *http.R
 	id := strings.TrimSpace(r.PathValue("id"))
 	state := strings.TrimSpace(r.PostFormValue("review_state"))
 	reason := strings.TrimSpace(r.PostFormValue("review_reason"))
-	if _, ok := models.NormalizeJobReviewState(state); !ok {
+	normalizedState, ok := models.NormalizeJobReviewState(state)
+	if !ok {
 		http.Error(w, "invalid review state", http.StatusBadRequest)
 		return
+	}
+	state = normalizedState
+	if state == models.JobReviewSkipped {
+		normalizedReason, ok := models.NormalizeJobReviewReason(reason)
+		if !ok {
+			http.Error(w, "invalid skip reason", http.StatusBadRequest)
+			return
+		}
+		reason = normalizedReason
+	} else {
+		reason = ""
 	}
 	if err := ws.st.SetJobReviewState(id, state, reason); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -55,9 +67,21 @@ func (ws *webServer) handleAppBulkReviewState(w http.ResponseWriter, r *http.Req
 	}
 	state := strings.TrimSpace(r.PostFormValue("review_state"))
 	reason := strings.TrimSpace(r.PostFormValue("review_reason"))
-	if _, ok := models.NormalizeJobReviewState(state); !ok {
+	normalizedState, ok := models.NormalizeJobReviewState(state)
+	if !ok {
 		redirectJobTriageResult(w, r, state, 0, fmt.Errorf("invalid review state %q", state))
 		return
+	}
+	state = normalizedState
+	if state == models.JobReviewSkipped {
+		normalizedReason, ok := models.NormalizeJobReviewReason(reason)
+		if !ok {
+			redirectJobTriageResult(w, r, state, 0, fmt.Errorf("invalid skip reason"))
+			return
+		}
+		reason = normalizedReason
+	} else {
+		reason = ""
 	}
 
 	scope := normalizedJobSelectionScope(jobSelectionValuesFromPost(r))
