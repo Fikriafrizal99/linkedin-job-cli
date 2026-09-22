@@ -499,21 +499,35 @@ This keeps regression coverage stable without depending on LinkedIn availability
 
 ## External Boundary
 
-The future Application Engine consumes collector data but remains separately deployable.
+The Application Engine consumes collector data but remains logically separate from collection.
 
-Contract:
+The approved user-facing handoff now includes a **Job Triage Layer**:
 
-```text
-Collector DB / Export
-        |
-        v
-Application Queue
-        |
-        v
-Draft Generator
-```
+~~~text
+Collector DB
+    |
+    v
+Job Triage
+    |
+    +-- UNREVIEWED
+    +-- LATER
+    +-- SKIPPED
+    |
+    +-- SHORTLISTED
+            |
+            v
+      Start Applications
+            |
+            v
+      Application Queue
+            |
+            v
+      Draft / Easy Apply
+~~~
 
-The collector must not require the Application Engine to function.
+The collector must not require triage or the Application Engine to function. Collection remains responsible for accurate discovery and persistence; triage owns the user's pursue/do-not-pursue decision; Applications owns execution.
+
+Detailed triage contract: [JOB_TRIAGE_WORKFLOW.md](JOB_TRIAGE_WORKFLOW.md).
 
 
 ## Application Engine Boundary
