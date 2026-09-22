@@ -129,11 +129,9 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 	html := out.String()
 	for _, want := range []string{
 		"Easy Apply 1 of 3",
-		"Open LinkedIn Easy Apply ↗",
-		"Open Next 3",
+		"Continue to LinkedIn Easy Apply →",
 		"Mark Applied &amp; Next",
 		"name=\"apply_confirm\" value=\"1\" required",
-		"target=\"_blank\"",
 		"Submission remains human-controlled",
 		"Job Context",
 		"Jakarta",
@@ -144,12 +142,17 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 		"Job description",
 		"Lead prospecting, pipeline reviews, account growth, and cross-functional coordination.",
 		"Company overview",
-		"data-mark=\"/app/applications/easy-ui/easy-apply/open\"",
 	} {
 		if !strings.Contains(html, want) { t.Errorf("Easy Apply UI missing %q", want) }
 	}
 	if strings.Contains(html, "auto-submit") {
 		t.Fatal("Easy Apply UI must not claim or expose auto-submit")
+	}
+	if strings.Contains(html, "target=\"_blank\"") {
+		t.Fatal("Easy Apply primary flow should stay in the same browser tab")
+	}
+	if strings.Contains(html, "Open Next 3") || strings.Contains(html, "Full job detail") {
+		t.Fatal("Easy Apply queue should be self-contained instead of pushing the user into extra tabs/pages")
 	}
 }
 

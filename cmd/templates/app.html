@@ -191,19 +191,19 @@
       {{if .SelectedApplication}}
         <section class="content-card"><div class="content-pad">
           <div class="review-progress">
-            <div><span class="review-counter">Easy Apply {{.EasyApplyPosition}} of {{.EasyApplyTotal}}</span><div class="muted">LinkedIn submission stays manual. Open the form, submit it yourself, then confirm completion here.</div></div>
+            <div><span class="review-counter">Easy Apply {{.EasyApplyPosition}} of {{.EasyApplyTotal}}</span><div class="muted">LinkedIn submission stays manual. Review the job here, continue to LinkedIn in this same tab, then use Back to confirm completion.</div></div>
             <div class="review-nav"><a class="btn ghost" id="easy-prev" href="{{.EasyApplyPrevURL}}">← Previous</a><a class="btn ghost" id="easy-next" href="{{.EasyApplyNextURL}}">Skip / Next →</a></div>
           </div>
           <div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Easy Apply{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span id="easy-state" title="{{.SelectedApplication.State}}" class="badge state-{{lower .SelectedApplication.State}}">{{stateLabel .SelectedApplication.State}}</span></div>
 
-          <ol class="step-list" aria-label="Manual application steps"><li>Open LinkedIn</li><li>Submit manually</li><li>Return &amp; confirm</li><li>Continue to next job</li></ol>          <div class="easy-actions">
-            <form id="easy-open-form" data-url="{{.EasyApplyCurrentURL}}" method="post" target="_blank" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/open">
+          <ol class="step-list" aria-label="Manual application steps"><li>Review job here</li><li>Continue to LinkedIn</li><li>Submit manually</li><li>Back &amp; confirm</li></ol>          <div class="easy-actions">
+            <form id="easy-open-form" data-url="{{.EasyApplyCurrentURL}}" method="post" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/open">
               <input type="hidden" name="csrf" value="{{.CSRF}}">
-              <button class="btn {{if eq .SelectedApplication.State "IN_PROGRESS"}}ghost{{else}}primary{{end}}" type="submit" {{if not .EasyApplyCurrentURL}}disabled{{end}}>Open LinkedIn Easy Apply ↗</button>
+              <button class="btn {{if eq .SelectedApplication.State "IN_PROGRESS"}}ghost{{else}}primary{{end}}" type="submit" {{if not .EasyApplyCurrentURL}}disabled{{end}}>Continue to LinkedIn Easy Apply →</button>
             </form>
           </div>
  <div id="easy-open-status" class="action-status" role="status"></div>
- {{if not .EasyApplyCurrentURL}}<div class="alert" role="alert">This job is missing a valid LinkedIn application URL. <a class="job-link" href="/app/jobs/{{.SelectedApplication.JobID}}">Check the original job</a> or skip it.</div>{{end}}
+ {{if not .EasyApplyCurrentURL}}<div class="alert" role="alert">This job is missing a valid LinkedIn application URL. Skip it or inspect the collected job from Jobs later.</div>{{end}}
  <noscript><p class="form-help">After opening LinkedIn, <a class="job-link" href="{{.EasyApplyStayURL}}">refresh this page</a> to update its local status.</p></noscript>
 <div class="easy-apply-hero">
             <div class="info-card">
@@ -224,7 +224,7 @@
 
           {{if .SelectedApplicationJob}}
           <section class="info-card" style="margin-top:14px">
-            <div class="detail-title"><div><h3>Job Context</h3><p class="muted">Review the posting details before completing the LinkedIn form.</p></div><a class="job-link" href="/app/jobs/{{.SelectedApplication.JobID}}">Full job detail →</a></div>
+            <div class="detail-title"><div><h3>Job Context</h3><p class="muted">Everything collected for this job is shown here so you can review it without opening another app page.</p></div></div>
             <div class="detail-grid" style="margin-top:10px">
               <div>
                 <div class="info-row"><span>Location</span><b>{{if .SelectedApplicationJob.Location}}{{.SelectedApplicationJob.Location}}{{else}}Not listed{{end}}</b></div>
@@ -247,8 +247,6 @@
           </section>
           {{end}}
 
-          {{range .EasyApplyOpenTargets}}<div class="easy-open-target" data-url="{{.URL}}" data-mark="{{.MarkURL}}" data-job="{{.JobID}}"></div>{{end}}
-
           <form id="easy-confirm-form" class="confirmation-block" data-opened="{{eq .SelectedApplication.State "IN_PROGRESS"}}" method="post" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/applied"><h3>After you submit on LinkedIn</h3><p class="form-help" id="easy-confirm-help">{{if eq .SelectedApplication.State "IN_PROGRESS"}}Confirm only when LinkedIn shows your submission is complete.{{else}}Open LinkedIn first. Return here after manually submitting the application.{{end}}</p>
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <input type="hidden" name="return_to" value="{{.EasyApplyStayURL}}">
@@ -256,7 +254,6 @@
             <label class="checkline"><input type="checkbox" name="apply_confirm" value="1" required {{if ne .SelectedApplication.State "IN_PROGRESS"}}disabled{{end}}> I confirm I manually submitted this application on LinkedIn.</label>
             <div class="detail-actions"><a class="btn ghost" href="{{.EasyApplyNextURL}}">Skip</a><button class="btn primary" type="submit" {{if ne .SelectedApplication.State "IN_PROGRESS"}}disabled{{end}}>Mark Applied &amp; Next</button></div>
           </form>
-          <details class="easy-secondary"><summary>Open several jobs (optional)</summary><div class="easy-actions">            <button class="btn ghost" id="easy-open-next3" type="button" {{if not .EasyApplyOpenTargets}}disabled{{end}}>Open Next 3</button></div><p class="form-help">Opens up to three upcoming jobs in separate tabs. Popup blocking may prevent tabs from opening. Submit each application manually.</p></details>
           <div class="footer-note">Mark Applied &amp; Next records APPLIED locally. It does not interact with the LinkedIn form.</div>
         </div></section>
       {{else}}
