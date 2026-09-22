@@ -154,6 +154,9 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 	if strings.Contains(html, "Open Next 3") || strings.Contains(html, "Full job detail") {
 		t.Fatal("Easy Apply queue should be self-contained instead of pushing the user into extra tabs/pages")
 	}
+	if strings.Contains(html, "View job ↗") {
+		t.Fatal("Easy Apply queue should not expose a separate View job navigation link")
+	}
 }
 
 

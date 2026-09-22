@@ -30,7 +30,7 @@
 </header>
 <main class="main" id="main-content" tabindex="-1">
  {{if .SelectedJob}}<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{.ListURL}}">← Back to Jobs</a><span>/ Job Detail</span></nav>{{end}}
- {{if eq .Active "applications"}}<nav class="workflow-nav" aria-label="Application workflow"><a href="{{if .ListURL}}{{.ListURL}}{{else}}/app/applications{{end}}">← Applications</a><a href="/app/jobs">Browse Jobs</a><a href="/app/applications/review" {{if .ReviewMode}}aria-current="page"{{end}}>Email review</a><a href="/app/applications/easy-apply" {{if .EasyApplyMode}}aria-current="page"{{end}}>Easy Apply</a>{{if .SelectedApplication}}<a href="/app/jobs/{{.SelectedApplication.JobID}}">View job ↗</a>{{end}}</nav>{{end}}
+ {{if eq .Active "applications"}}<nav class="workflow-nav" aria-label="Application workflow"><a href="{{if .ListURL}}{{.ListURL}}{{else}}/app/applications{{end}}">← Applications</a><a href="/app/jobs">Browse Jobs</a><a href="/app/applications/review" {{if .ReviewMode}}aria-current="page"{{end}}>Email review</a><a href="/app/applications/easy-apply" {{if .EasyApplyMode}}aria-current="page"{{end}}>Easy Apply</a>{{if and .SelectedApplication (not .EasyApplyMode)}}<a href="/app/jobs/{{.SelectedApplication.JobID}}">View job ↗</a>{{end}}</nav>{{end}}
   <div class="page-head"><div><h1>{{.Title}}</h1><p>{{.Subtitle}}</p></div>{{if eq .Active "dashboard"}}<a class="btn primary" href="/app/collect">＋ Collect New Jobs</a>{{end}}</div>
   {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
   {{if .ActionError}}<div class="alert" role="alert">{{.ActionError}}</div>{{end}}
