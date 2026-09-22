@@ -143,11 +143,11 @@
         <div class="bulk-bar">
           <div class="bulk-primary-row">
             <div class="bulk-select">
-              <label class="checkline"><input id="select-all-jobs" type="checkbox"> Select visible</label>
+              {{if gt .SelectableJobsCount 0}}<label class="checkline"><input id="select-all-jobs" type="checkbox"> Select visible</label>{{else}}<span class="batch-note">No pending jobs to select</span>{{end}}
               <span id="selected-jobs-count" class="batch-note" role="status" data-selected-count="{{.SelectedJobsCount}}">{{.SelectedJobsCount}} selected across pages</span>
             </div>
             <div class="bulk-actions triage-actions">
-              <button class="btn ghost selection-control" type="submit" formaction="/app/jobs/selection" name="selection_action" value="all" {{if eq .SelectableJobsCount 0}}disabled{{end}}>Select all {{.SelectableJobsCount}} eligible</button>
+              {{if gt .SelectableJobsCount 0}}<button class="btn ghost selection-control" type="submit" formaction="/app/jobs/selection" name="selection_action" value="all">Select all {{.SelectableJobsCount}} eligible</button>{{end}}
               {{if gt .SelectedJobsCount 0}}<button class="btn ghost selection-control" type="submit" formaction="/app/jobs/selection" name="selection_action" value="clear">Clear selection</button>{{end}}
               {{if eq .ReviewFilter "SHORTLISTED"}}
                 <button class="btn primary js-job-action js-start-applications" type="submit" formaction="/app/jobs/bulk/start-applications" {{if eq .SelectedJobsCount 0}}hidden{{end}}>Start Applications</button>
