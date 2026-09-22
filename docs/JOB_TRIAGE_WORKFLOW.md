@@ -507,14 +507,16 @@ Acceptance:
 
 ## Phase 4 — Shortlist to Applications handoff
 
+**Status: implemented; runtime test execution pending.**
+
 Goal: execution starts only after a positive job decision.
 
-- [ ] add Start Applications to Shortlisted;
-- [ ] preview Email / Easy Apply / Needs Attention counts;
-- [ ] reuse existing application queue creation logic;
-- [ ] keep application creation idempotent;
-- [ ] remove Inbox direct Process Selected as the default workflow;
-- [ ] preserve bounded provider-operation limits downstream.
+- [x] add Start Applications to Shortlisted;
+- [x] preview Email / Easy Apply / Needs Attention counts;
+- [x] reuse existing application queue creation logic;
+- [x] keep application creation idempotent;
+- [x] remove Inbox direct Process Selected as the default workflow;
+- [x] preserve bounded provider-operation limits downstream.
 
 Acceptance:
 
