@@ -127,14 +127,13 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 	for _, want := range []string{
 		"id=\"select-all-jobs\"",
 		"name=\"job_id\" value=\"101\"",
-		"formaction=\"/app/jobs/bulk/queue\"",
-		"formaction=\"/app/jobs/bulk/process-to-draft\"",
-		"Process Selected",
+		"formaction=\"/app/jobs/bulk/start-applications\"",
+		"Start Applications",
+		"Select all",
+		"Clear selection",
 		"name=\"filter_q\" value=\"sales\"",
 		"name=\"filter_location\" value=\"Jakarta\"",
-		"name=\"attachment\" value=\"portfolio-1\" checked",
 		"Unsupported destination · skipped by default",
-		"Include unsupported jobs as Needs attention",
 	} {
 		if !strings.Contains(html, want) { t.Errorf("Jobs bulk UI missing %q", want) }
 	}
@@ -161,22 +160,25 @@ func TestJobsInboxRendersTriageActions(t *testing.T) {
 	}
 }
 
-func TestJobsProcessButtonRemainsAvailableWithoutGmail(t *testing.T) {
+func TestShortlistedStartApplicationsDoesNotRequireGmail(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil { t.Fatal(err) }
 	var b strings.Builder
 	if err := tpl.Execute(&b, appPageData{
 		Title: "Shortlisted", Active: "jobs", CandidateName: "Candidate", CandidateInitials: "C",
-		ReviewFilter: models.JobReviewShortlisted,
-		Jobs: []appJobRow{{ID: "101", Title: "Sales", Method: "EASY_APPLY", State: "NOT_APPLIED", ReviewState: models.JobReviewShortlisted}},
+		ReviewFilter: models.JobReviewShortlisted, SelectedJobsCount: 1, SelectedEasyApplyCount: 1,
+		Jobs: []appJobRow{{ID: "101", Title: "Sales", Method: "EASY_APPLY", State: "NOT_APPLIED", ReviewState: models.JobReviewShortlisted, Selected: true}},
 	}); err != nil { t.Fatal(err) }
 	html := b.String()
-	if !strings.Contains(html, `formaction="/app/jobs/bulk/process-to-draft"`) ||
-		!strings.Contains(html, "Process Selected") {
-		t.Fatal("Process Selected should stay available for Easy Apply even when Gmail is disconnected")
+	if !strings.Contains(html, `formaction="/app/jobs/bulk/start-applications"`) ||
+		!strings.Contains(html, "Start Applications") {
+		t.Fatal("Shortlisted must expose Start Applications")
 	}
-	if strings.Contains(html, `title="Connect Gmail first"`) {
-		t.Fatal("Gmail disconnect must not block Easy Apply processing")
+	if strings.Contains(html, "Process Selected") || strings.Contains(html, "Queue Selected") {
+		t.Fatal("legacy execution actions should not remain in the Shortlisted UI")
+	}
+	if strings.Contains(html, "Connect Gmail") {
+		t.Fatal("Start Applications must not require Gmail")
 	}
 }
 
