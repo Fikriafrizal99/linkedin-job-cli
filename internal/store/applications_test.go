@@ -37,6 +37,69 @@ func TestQueueApplicationReadyEmail(t *testing.T) {
 	}
 }
 
+func TestQueueApplicationPromotesJobToShortlisted(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-promotes-shortlist")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	before, _ := st.Get(j.ID)
+	if before.ReviewState != models.JobReviewUnreviewed {
+		t.Fatalf("initial review state=%q", before.ReviewState)
+	}
+
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+	after, err := st.Get(j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.ReviewState != models.JobReviewShortlisted {
+		t.Fatalf("review state=%q want SHORTLISTED", after.ReviewState)
+	}
+	if after.ReviewedAt == "" {
+		t.Fatal("queued job should have reviewed_at")
+	}
+}
+
+func TestApplicationBlocksNonShortlistedTriageUntilRemoved(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-triage-guard")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := st.QueueApplication(j.ID); err != nil {
+		t.Fatalf("QueueApplication: %v", err)
+	}
+
+	if err := st.SetJobReviewState(j.ID, models.JobReviewSkipped, "not interested"); err == nil {
+		t.Fatal("active application must block SKIPPED")
+	}
+	if err := st.SetJobReviewState(j.ID, models.JobReviewLater, ""); err == nil {
+		t.Fatal("active application must block LATER")
+	}
+	current, _ := st.Get(j.ID)
+	if current.ReviewState != models.JobReviewShortlisted {
+		t.Fatalf("guard changed review state to %q", current.ReviewState)
+	}
+
+	if err := st.RemoveApplication(j.ID); err != nil {
+		t.Fatalf("RemoveApplication: %v", err)
+	}
+	if err := st.SetJobReviewState(j.ID, models.JobReviewSkipped, "not interested"); err != nil {
+		t.Fatalf("SKIPPED should succeed after removable application is removed: %v", err)
+	}
+	current, _ = st.Get(j.ID)
+	if current.ReviewState != models.JobReviewSkipped {
+		t.Fatalf("review state=%q want SKIPPED", current.ReviewState)
+	}
+}
+
 func TestQueueApplicationNeedReviewWithoutEmail(t *testing.T) {
 	st := tmpDB(t)
 	j := sampleJob("app-review")
