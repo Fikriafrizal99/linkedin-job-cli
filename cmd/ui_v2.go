@@ -100,6 +100,9 @@ type appPageData struct {
 	ActionError                                    string
 	SelectionNotice                                string
 	SelectedJobsCount                              int
+	SelectedEmailCount                             int
+	SelectedEasyApplyCount                         int
+	SelectedOtherCount                             int
 	GmailCredentialsPath                           string
 	GmailTokenPath                                 string
 	GmailCredentialsFound                          bool
@@ -571,6 +574,20 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.ActionMessage = fmt.Sprintf("Job triage updated: %d job(s) moved to %s.", updated, jobReviewStateLabel(triage))
 		}
 	}
+	if r.URL.Query().Get("started") == "1" {
+		pd.ActionMessage = "Application started from the shortlist."
+	}
+	if r.URL.Query().Get("applications_started") == "1" {
+		selected, _ := strconv.Atoi(r.URL.Query().Get("selected"))
+		started, _ := strconv.Atoi(r.URL.Query().Get("started_count"))
+		emailCount, _ := strconv.Atoi(r.URL.Query().Get("email_count"))
+		easyCount, _ := strconv.Atoi(r.URL.Query().Get("easy_count"))
+		needReview, _ := strconv.Atoi(r.URL.Query().Get("need_review_count"))
+		existing, _ := strconv.Atoi(r.URL.Query().Get("existing_count"))
+		notEligible, _ := strconv.Atoi(r.URL.Query().Get("not_eligible_count"))
+		failed, _ := strconv.Atoi(r.URL.Query().Get("failed_count"))
+		pd.ActionMessage = fmt.Sprintf("Start Applications: %d selected · %d started (%d email, %d Easy Apply, %d needs attention) · %d already in pipeline · %d not eligible · %d failed.", selected, started, emailCount, easyCount, needReview, existing, notEligible, failed)
+	}
 	if r.URL.Query().Get("queued") == "1" {
 		pd.ActionMessage = "Application queued successfully."
 	}
@@ -985,6 +1002,10 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				pd.Jobs = pd.Jobs[start:end]
 				selectedJobs := ws.selectedJobsForScope(selectionScope)
 				pd.SelectedJobsCount = len(selectedJobs)
+				summary := ws.selectionSummary(selectionScope)
+				pd.SelectedEmailCount = summary.Email
+				pd.SelectedEasyApplyCount = summary.EasyApply
+				pd.SelectedOtherCount = summary.Other
 				for i := range pd.Jobs {
 					pd.Jobs[i].Selected = selectedJobs[pd.Jobs[i].ID]
 				}
