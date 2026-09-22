@@ -76,6 +76,7 @@ Binds to localhost only by default.`,
 		mux.HandleFunc("GET /", ws.handleAppRoot)
 		mux.HandleFunc("GET /app/", ws.handleAppUI)
 		mux.HandleFunc("POST /app/collect/run", ws.handleAppCollectRun)
+		mux.HandleFunc("POST /app/jobs/selection", ws.handleAppJobSelection)
 		mux.HandleFunc("POST /app/jobs/{id}/review-state", ws.handleAppSetJobReviewState)
 		mux.HandleFunc("POST /app/jobs/bulk/review-state", ws.handleAppBulkReviewState)
 		mux.HandleFunc("POST /app/jobs/bulk/queue", ws.handleAppBulkQueueJobs)
@@ -157,8 +158,11 @@ type webServer struct {
 	collectMu    sync.Mutex
 	documentMu   sync.Mutex
 	lifecycleMu  sync.Mutex
-	gmailOAuthMu sync.Mutex
-	gmailOAuth   map[string]gmailOAuthPending
+	gmailOAuthMu      sync.Mutex
+	gmailOAuth        map[string]gmailOAuthPending
+	selectionMu       sync.Mutex
+	jobSelectionScope string
+	selectedJobIDs    map[string]bool
 }
 
 func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
