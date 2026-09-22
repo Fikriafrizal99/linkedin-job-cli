@@ -66,6 +66,10 @@
   var jobSelectionTotal = jobCount ? parseInt(jobCount.dataset.selectedCount || '0', 10) || 0 : 0;
   var jobSelectionPending = Promise.resolve();
   var resumeJobSubmit = false;
+  var jobSelectionDetail = byId('jobs-selection-detail');
+  var jobSelectedEmail = jobSelectionDetail ? parseInt(jobSelectionDetail.dataset.emailCount || '0', 10) || 0 : 0;
+  var jobSelectedEasy = jobSelectionDetail ? parseInt(jobSelectionDetail.dataset.easyCount || '0', 10) || 0 : 0;
+  var jobSelectedOther = jobSelectionDetail ? parseInt(jobSelectionDetail.dataset.otherCount || '0', 10) || 0 : 0;
 
   function jobSelectionPayload(action, ids, selected) {
     var data = new URLSearchParams();
@@ -91,6 +95,14 @@
         return r.json().then(function (data) {
           if (!r.ok || !data.ok) throw new Error(data.error || 'Selection update failed');
           jobSelectionTotal = data.count || 0;
+          jobSelectedEmail = data.email || 0;
+          jobSelectedEasy = data.easy_apply || 0;
+          jobSelectedOther = data.other || 0;
+          if (jobSelectionDetail) {
+            jobSelectionDetail.dataset.emailCount = String(jobSelectedEmail);
+            jobSelectionDetail.dataset.easyCount = String(jobSelectedEasy);
+            jobSelectionDetail.dataset.otherCount = String(jobSelectedOther);
+          }
           if (jobCount) {
             jobCount.dataset.selectedCount = String(jobSelectionTotal);
             jobCount.textContent = jobSelectionTotal + ' selected across pages';
@@ -108,26 +120,20 @@
   }
 
   var syncJobs = selection(jobs, byId('select-all-jobs'), null, function (selected) {
-    var visibleN = selected.length, totalN = jobSelectionTotal;
-    var queue = byId('queue-selected-jobs'), process = byId('process-selected-jobs');
+    var totalN = jobSelectionTotal;
     if (jobCount) jobCount.textContent = totalN + ' selected across pages';
     all('.js-triage-action').forEach(function (button) {
       button.disabled = totalN === 0;
       button.title = totalN === 0 ? 'Select at least one job' : 'Update all selected jobs, including selections on other pages';
     });
-    // Temporary compatibility actions remain page-local until Start Applications replaces them.
-    if (queue) {
-      queue.disabled = visibleN === 0 || visibleN > 50;
-      queue.title = visibleN > 50 ? 'Select at most 50 visible jobs' : 'Temporary page-local compatibility action';
+    var startApplications = document.querySelector('.js-start-applications');
+    if (startApplications) {
+      startApplications.disabled = totalN === 0;
+      startApplications.title = totalN === 0 ? 'Select at least one shortlisted job' : 'Create application records for all selected shortlisted jobs';
     }
-    if (process) {
-      process.disabled = visibleN === 0 || visibleN > 25;
-      process.title = visibleN > 25 ? 'Select at most 25 visible jobs' : 'Temporary page-local compatibility action';
+    if (jobSelectionDetail) {
+      jobSelectionDetail.textContent = totalN ? totalN + ' selected across pages · ' + jobSelectedEmail + ' email · ' + jobSelectedEasy + ' Easy Apply · ' + jobSelectedOther + ' needs attention.' : 'Select jobs to update their decision.';
     }
-    var email = selected.filter(function (x) { return x.dataset.method === 'EMAIL'; }).length;
-    var easy = selected.filter(function (x) { return x.dataset.method === 'EASY_APPLY'; }).length;
-    var detail = byId('jobs-selection-detail');
-    if (detail) detail.textContent = totalN ? totalN + ' selected across pages. On this page: ' + visibleN + ' selected · ' + email + ' email · ' + easy + ' Easy Apply · ' + (visibleN - email - easy) + ' other.' : 'Select jobs to update their decision.';
   });
 
   jobs.forEach(function (box) {
@@ -141,7 +147,7 @@
   });
   if (jobForm) jobForm.addEventListener('submit', function (event) {
     var submitter = event.submitter;
-    if (resumeJobSubmit || !submitter || (!submitter.classList.contains('js-triage-action') && !submitter.classList.contains('selection-control'))) return;
+    if (resumeJobSubmit || !submitter || (!submitter.classList.contains('js-triage-action') && !submitter.classList.contains('js-start-applications') && !submitter.classList.contains('selection-control'))) return;
     event.preventDefault();
     jobSelectionPending.finally(function () {
       resumeJobSubmit = true;
