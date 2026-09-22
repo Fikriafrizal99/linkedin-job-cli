@@ -65,7 +65,6 @@
   var jobCount = byId('selected-jobs-count');
   var jobSelectionTotal = jobCount ? parseInt(jobCount.dataset.selectedCount || '0', 10) || 0 : 0;
   var jobSelectionPending = Promise.resolve();
-  var resumeJobSubmit = false;
   var jobSelectionDetail = byId('jobs-selection-detail');
   var jobSelectedEmail = jobSelectionDetail ? parseInt(jobSelectionDetail.dataset.emailCount || '0', 10) || 0 : 0;
   var jobSelectedEasy = jobSelectionDetail ? parseInt(jobSelectionDetail.dataset.easyCount || '0', 10) || 0 : 0;
@@ -150,12 +149,38 @@
   });
   if (jobForm) jobForm.addEventListener('submit', function (event) {
     var submitter = event.submitter;
-    if (resumeJobSubmit || !submitter || (!submitter.classList.contains('js-triage-action') && !submitter.classList.contains('js-start-applications') && !submitter.classList.contains('selection-control'))) return;
+    if (!submitter || (!submitter.classList.contains('js-triage-action') && !submitter.classList.contains('js-start-applications') && !submitter.classList.contains('selection-control'))) return;
+
+    // Do not rely on requestSubmit() after an async selection round-trip.
+    // Some browsers can lose the original submitter/formaction/name-value pair
+    // in that second synthetic submit. Wait for selection persistence, copy the
+    // submitter semantics into the form explicitly, then perform one native POST.
     event.preventDefault();
+
+    var target = submitter.getAttribute('formaction') || jobForm.getAttribute('action') || location.pathname;
+    var method = submitter.getAttribute('formmethod') || jobForm.getAttribute('method') || 'post';
+    var hiddenSubmitter = null;
+
+    if (submitter.name) {
+      hiddenSubmitter = document.createElement('input');
+      hiddenSubmitter.type = 'hidden';
+      hiddenSubmitter.name = submitter.name;
+      hiddenSubmitter.value = submitter.value;
+      jobForm.appendChild(hiddenSubmitter);
+    }
+
+    submitter.setAttribute('aria-disabled', 'true');
+    var originalText = submitter.textContent;
+    submitter.textContent = 'Working…';
+
     jobSelectionPending.finally(function () {
-      resumeJobSubmit = true;
-      jobForm.requestSubmit(submitter);
-      resumeJobSubmit = false;
+      jobForm.setAttribute('action', target);
+      jobForm.setAttribute('method', method);
+      HTMLFormElement.prototype.submit.call(jobForm);
+    }).catch(function () {
+      if (hiddenSubmitter) hiddenSubmitter.remove();
+      submitter.removeAttribute('aria-disabled');
+      submitter.textContent = originalText;
     });
   });
   var appForm = byId('bulk-app-form');
