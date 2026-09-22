@@ -449,13 +449,15 @@ Cross-page selection can later replace repeated IDs with a query-backed selectio
 
 ## Phase 1 — Persistent triage state
 
+**Status: implemented; runtime test execution pending.**
+
 Goal: make Skip, Shortlist, and Later real persisted decisions.
 
-- [ ] add review_state, review_reason, reviewed_at to the jobs schema;
-- [ ] add migration and backfill;
-- [ ] add model fields/constants;
-- [ ] add store methods and validation;
-- [ ] add unit tests.
+- [x] add review_state, review_reason, reviewed_at to the jobs schema;
+- [x] add migration and backfill;
+- [x] add model fields/constants;
+- [x] add store methods and validation;
+- [x] add unit tests.
 
 Acceptance:
 
@@ -465,15 +467,17 @@ Acceptance:
 
 ## Phase 2 — Jobs Inbox and triage UI
 
+**Status: implemented; runtime test execution pending.**
+
 Goal: separate deciding from applying.
 
-- [ ] default Jobs view to UNREVIEWED Inbox;
-- [ ] add Inbox / Shortlisted / Later / Skipped / All Jobs navigation;
-- [ ] replace primary Inbox Queue/Process actions with Shortlist/Later/Skip;
-- [ ] add single-job triage actions;
-- [ ] make a triaged row leave Inbox immediately;
-- [ ] show counts per review state;
-- [ ] keep All Jobs as complete searchable history.
+- [x] default Jobs view to UNREVIEWED Inbox;
+- [x] add Inbox / Shortlisted / Later / Skipped / All Jobs navigation;
+- [x] replace primary Inbox Queue/Process actions with Shortlist/Later/Skip;
+- [x] add single-job triage actions;
+- [x] make a triaged row leave Inbox immediately;
+- [x] show counts per review state;
+- [x] keep All Jobs as complete searchable history.
 
 Acceptance:
 
