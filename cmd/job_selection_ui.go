@@ -15,6 +15,13 @@ import (
 
 var jobSelectionFilterKeys = []string{"q", "location", "method", "state", "since", "review"}
 
+type jobSelectionSummary struct {
+	Count      int
+	Email      int
+	EasyApply  int
+	Other      int
+}
+
 func normalizedJobSelectionScope(v url.Values) string {
 	out := url.Values{}
 	for _, key := range jobSelectionFilterKeys {
@@ -131,6 +138,33 @@ func (ws *webServer) removeSelectedJobs(ids []string) {
 	}
 }
 
+func (ws *webServer) selectionSummary(scope string) jobSelectionSummary {
+	selected := ws.selectedJobsForScope(scope)
+	summary := jobSelectionSummary{Count: len(selected)}
+	if len(selected) == 0 {
+		return summary
+	}
+	jobs, err := ws.st.List(store.Filters{SortBySearched: true})
+	if err != nil {
+		summary.Other = summary.Count
+		return summary
+	}
+	for _, job := range jobs {
+		if !selected[job.ID] {
+			continue
+		}
+		switch applicationMethodLabel(job.ApplicationMethod) {
+		case "EMAIL":
+			summary.Email++
+		case "EASY_APPLY":
+			summary.EasyApply++
+		default:
+			summary.Other++
+		}
+	}
+	return summary
+}
+
 func (ws *webServer) handleAppJobSelection(w http.ResponseWriter, r *http.Request) {
 	if !ws.checkCSRF(w, r) {
 		return
@@ -169,7 +203,11 @@ func (ws *webServer) handleAppJobSelection(w http.ResponseWriter, r *http.Reques
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error()})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "count": count})
+		summary := ws.selectionSummary(scope)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true, "count": count,
+			"email": summary.Email, "easy_apply": summary.EasyApply, "other": summary.Other,
+		})
 		return
 	}
 	redirectJobSelection(w, r, err)
