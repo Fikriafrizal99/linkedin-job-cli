@@ -120,7 +120,10 @@
   }
 
   var syncJobs = selection(jobs, byId('select-all-jobs'), null, function (selected) {
-    var totalN = jobSelectionTotal;
+    // Visible checkbox state must be immediately actionable. The persisted
+    // cross-page count can arrive a moment later from /app/jobs/selection;
+    // using the larger value avoids a disabled-button race after a click.
+    var totalN = Math.max(jobSelectionTotal, selected.length);
     if (jobCount) jobCount.textContent = totalN + ' selected across pages';
     all('.js-triage-action').forEach(function (button) {
       button.disabled = totalN === 0;
