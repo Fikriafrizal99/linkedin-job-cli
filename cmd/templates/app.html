@@ -39,17 +39,19 @@
 
   {{if eq .Active "dashboard"}}
     <section class="grid-kpi">
-      <div class="kpi"><div class="kpi-icon amber">J</div><div><div class="value">{{.Stats.JobsTotal}}</div><div class="label">Jobs Collected</div><div class="hint">Ready to browse</div></div></div>
-      <div class="kpi"><div class="kpi-icon cyan">@</div><div><div class="value">{{.Stats.EmailTotal}}</div><div class="label">With Email Contact</div><div class="hint">Explicit application emails</div></div></div>
+      <div class="kpi"><div class="kpi-icon amber">J</div><div><div class="value">{{.Stats.InboxTotal}}</div><div class="label">New to Review</div><div class="hint">{{.Stats.JobsTotal}} jobs stored</div></div></div>
+      <div class="kpi"><div class="kpi-icon cyan">★</div><div><div class="value">{{.Stats.ShortlistedTotal}}</div><div class="label">Shortlisted</div><div class="hint">{{.Stats.LaterTotal}} saved for later · {{.Stats.SkippedTotal}} skipped</div></div></div>
       <div class="kpi"><div class="kpi-icon purple">A</div><div><div class="value">{{.Stats.PipelineTotal}}</div><div class="label">In Application Pipeline</div><div class="hint">{{.Stats.NeedReviewTotal}} need attention · {{.Stats.DraftTotal}} drafts to review</div></div></div>
       <div class="kpi"><div class="kpi-icon green">✓</div><div><div class="value">{{.Stats.CompletedTotal}}</div><div class="label">Completed Applications</div><div class="hint good">{{.Stats.SentTotal}} email sent · {{.Stats.AppliedTotal}} LinkedIn applied</div></div></div>
     </section>
     <section class="dashboard-grid">
-      <div class="panel"><div class="panel-head"><h2>Recent Jobs</h2><a class="sub" href="/app/jobs">View All →</a></div>
+      <div class="panel"><div class="panel-head"><h2>Inbox · New to Review</h2><a class="sub" href="/app/jobs">Review Inbox →</a></div>
       {{if .Jobs}}<div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table><thead><tr><th>Job Title</th><th>Company</th><th>Status</th></tr></thead><tbody>
       {{range .Jobs}}<tr><td><a class="job-link" href="{{detailURL "/app/jobs/" .ID $.ListURL}}">{{.Title}}</a></td><td>{{.Company}}</td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td></tr>{{end}}
-      </tbody></table></div>{{else}}<div class="empty">No jobs collected yet. <a class="job-link" href="/app/collect">Collect your first jobs →</a></div>{{end}}</div>
+      </tbody></table></div>{{else}}<div class="empty">Inbox clear. <a class="job-link" href="/app/collect">Collect new jobs →</a></div>{{end}}</div>
       <div class="panel"><div class="panel-head"><h2>Next actions</h2></div><div class="attention-list">
+ <a class="attention-link" href="/app/jobs"><span class="attention-number">{{.Stats.InboxTotal}}</span><div><b>Review new jobs →</b><small>Shortlist, save for later, or skip</small></div></a>
+ <a class="attention-link" href="/app/jobs?review=SHORTLISTED"><span class="attention-number">{{.Stats.ShortlistedTotal}}</span><div><b>Review shortlist →</b><small>Start applications only when you are ready</small></div></a>
  <a class="attention-link" href="/app/applications/review"><span class="attention-number">{{.Stats.DraftTotal}}</span><div><b>Review email drafts →</b><small>Check content and attachments in Gmail</small></div></a>
  <a class="attention-link" href="/app/applications/easy-apply"><span class="attention-number">{{.Stats.EasyReadyTotal}} / {{.Stats.InProgressTotal}}</span><div><b>Continue Easy Apply →</b><small>Ready / in progress · manual LinkedIn submission</small></div></a>
  <a class="attention-link" href="/app/applications?state=READY_EMAIL"><span class="attention-number">{{.Stats.ReadyTotal}}</span><div><b>Prepare email applications →</b><small>Choose CVs and create drafts</small></div></a>
@@ -57,6 +59,14 @@
  {{if .Stats.NeedReviewTotal}}<a class="attention-link" href="/app/applications?state=NEED_REVIEW"><span class="attention-number">{{.Stats.NeedReviewTotal}}</span><div><b>Resolve application destinations →</b><small>Needs attention before preparation</small></div></a>{{end}}
  </div></div>
     </section>
+    <section class="content-card" style="margin-top:18px"><div class="content-pad">
+      <div class="detail-title"><div><h2>Triage Insights</h2><p class="muted">Decision history helps you see whether collection queries are bringing relevant opportunities. Nothing here changes your collector automatically.</p></div></div>
+      <div class="detail-grid">
+        <div class="info-card"><div class="info-row"><span>Inbox</span><b>{{.Stats.InboxTotal}}</b></div><div class="info-row"><span>Shortlisted</span><b>{{.Stats.ShortlistedTotal}}</b></div><div class="info-row"><span>Later</span><b>{{.Stats.LaterTotal}}</b></div><div class="info-row"><span>Skipped</span><b>{{.Stats.SkippedTotal}}</b></div></div>
+        <div class="info-card"><h3>Top skip reasons</h3>{{if .SkipReasons}}{{range .SkipReasons}}<div class="info-row"><span>{{.Label}}</span><b>{{.Count}} · {{.Share}}%</b></div>{{end}}{{else}}<p class="muted">Add optional reasons when skipping jobs to build this summary.</p>{{end}}</div>
+      </div>
+      {{if .CollectorInsight}}<div class="next-step" style="margin-top:12px"><strong>Collector signal</strong>{{.CollectorInsight}}</div>{{end}}
+    </div></section>
     <section class="quick-actions">
       <a class="quick" href="/app/collect"><strong>⌕ Collect Jobs</strong><small>Fetch latest jobs from LinkedIn</small></a>
       <a class="quick" href="/app/cv-profiles"><strong>▤ Manage CVs</strong><small>CV, portfolio & supporting files</small></a>
@@ -82,6 +92,7 @@
           <form class="triage-detail-actions" method="post" action="/app/jobs/{{.SelectedJob.ID}}/review-state">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <input type="hidden" name="return_url" value="{{.ListURL}}">
+            <label class="form-group triage-reason"><span class="field-label">Optional skip reason</span><select name="review_reason"><option value="">Not specified</option><option value="ROLE_MISMATCH">Role mismatch</option><option value="LOCATION">Location</option><option value="EXPERIENCE_TOO_HIGH">Experience too high</option><option value="INDUSTRY">Industry</option><option value="COMPANY">Company</option><option value="COMPENSATION">Compensation</option><option value="UNCLEAR_POSTING">Unclear posting</option><option value="ALREADY_SEEN">Already seen</option><option value="OTHER">Other</option></select></label>
             <button class="btn primary" type="submit" name="review_state" value="SHORTLISTED">Shortlist</button>
             <button class="btn ghost" type="submit" name="review_state" value="LATER">Later</button>
             <button class="btn ghost" type="submit" name="review_state" value="SKIPPED">Skip</button>
@@ -152,6 +163,7 @@
             data-email-count="{{.SelectedEmailCount}}" data-easy-count="{{.SelectedEasyApplyCount}}" data-other-count="{{.SelectedOtherCount}}">
             {{if gt .SelectedJobsCount 0}}{{.SelectedJobsCount}} selected across pages · {{.SelectedEmailCount}} email · {{.SelectedEasyApplyCount}} Easy Apply · {{.SelectedOtherCount}} needs attention.{{else}}Select jobs to update their decision.{{end}}
           </div>
+          <details class="bulk-options"><summary>Optional skip reason</summary><label class="form-group"><span class="field-label">Reason applied only when you press Skip</span><select name="review_reason"><option value="">Not specified</option><option value="ROLE_MISMATCH">Role mismatch</option><option value="LOCATION">Location</option><option value="EXPERIENCE_TOO_HIGH">Experience too high</option><option value="INDUSTRY">Industry</option><option value="COMPANY">Company</option><option value="COMPENSATION">Compensation</option><option value="UNCLEAR_POSTING">Unclear posting</option><option value="ALREADY_SEEN">Already seen</option><option value="OTHER">Other</option></select></label></details>
         </div>
 
         <div class="content-card"><div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table class="jobs-table"><thead><tr><th style="width:42px"><span class="sr-only">Select</span></th><th>Job</th><th>Company</th><th>Location</th><th>Apply</th><th>Decision</th><th>Application</th><th>Added</th></tr></thead><tbody>
