@@ -14,7 +14,7 @@
   <div class="brand"><div class="brand-mark">▣</div><div><strong>LinkedIn Job CLI</strong><small>Find Jobs. Prepare. Apply.</small></div></div>
   <nav class="nav" aria-label="Main navigation">
     <a href="/app/dashboard" class="{{if eq .Active "dashboard"}}active{{end}}" {{if eq .Active "dashboard"}}aria-current="page"{{end}}><span class="nav-icon">⌂</span>Dashboard</a>
-    <a href="/app/jobs" class="{{if eq .Active "jobs"}}active{{end}}" {{if eq .Active "jobs"}}aria-current="page"{{end}}><span class="nav-icon">J</span>Jobs <span class="nav-count">{{.Stats.JobsTotal}}</span></a>
+    <a href="/app/jobs" data-jobs-return class="{{if eq .Active "jobs"}}active{{end}}" {{if eq .Active "jobs"}}aria-current="page"{{end}}><span class="nav-icon">J</span>Jobs <span class="nav-count">{{.Stats.JobsTotal}}</span></a>
     <a href="/app/applications" class="{{if eq .Active "applications"}}active{{end}}" {{if eq .Active "applications"}}aria-current="page"{{end}}><span class="nav-icon">✓</span>Applications <span class="nav-count">{{.Stats.PipelineTotal}}</span></a>
     <a href="/app/cv-profiles" class="{{if eq .Active "cv-profiles"}}active{{end}}" {{if eq .Active "cv-profiles"}}aria-current="page"{{end}}><span class="nav-icon">CV</span>CV Profiles <span class="nav-count">{{len .CVProfiles}}</span></a>
     <div class="nav-label">TOOLS</div>
@@ -24,13 +24,13 @@
   
 </aside>
 <header class="topbar">
- <details class="mobile-menu"><summary aria-label="Open navigation">☰ <span>Menu</span></summary><nav aria-label="Mobile navigation"><a href="/app/dashboard">Dashboard</a><a href="/app/jobs">Jobs</a><a href="/app/applications">Applications</a><a href="/app/applications/review">Email review</a><a href="/app/applications/easy-apply">Easy Apply</a><a href="/app/cv-profiles">CV Profiles</a><a href="/app/collect">Collect Jobs</a><a href="/app/settings">Settings</a></nav></details>
+ <details class="mobile-menu"><summary aria-label="Open navigation">☰ <span>Menu</span></summary><nav aria-label="Mobile navigation"><a href="/app/dashboard">Dashboard</a><a href="/app/jobs" data-jobs-return>Jobs</a><a href="/app/applications">Applications</a><a href="/app/applications/review">Email review</a><a href="/app/applications/easy-apply">Easy Apply</a><a href="/app/cv-profiles">CV Profiles</a><a href="/app/collect">Collect Jobs</a><a href="/app/settings">Settings</a></nav></details>
   <form action="/app/jobs" method="get" style="display:contents"><input type="hidden" name="review" value="ALL"><input class="global-search" name="q" value="{{.Query}}" placeholder="Search jobs, companies, or keywords…" aria-label="Global search"></form>
   <div class="top-user"><div class="avatar">{{.CandidateInitials}}</div><div class="name">{{.CandidateName}}<small>Local Job Command Center</small></div></div>
 </header>
 <main class="main" id="main-content" tabindex="-1">
  {{if .SelectedJob}}<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{.ListURL}}">← Back to Jobs</a><span>/ Job Detail</span></nav>{{end}}
- {{if eq .Active "applications"}}<nav class="workflow-nav" aria-label="Application workflow"><a href="{{if .ListURL}}{{.ListURL}}{{else}}/app/applications{{end}}">← Applications</a><a href="/app/jobs">Browse Jobs</a><a href="/app/applications/review" {{if .ReviewMode}}aria-current="page"{{end}}>Email review</a><a href="/app/applications/easy-apply" {{if .EasyApplyMode}}aria-current="page"{{end}}>Easy Apply</a>{{if and .SelectedApplication (not .EasyApplyMode)}}<a href="/app/jobs/{{.SelectedApplication.JobID}}">View job ↗</a>{{end}}</nav>{{end}}
+ {{if eq .Active "applications"}}<nav class="workflow-nav" aria-label="Application workflow"><a href="{{if .ListURL}}{{.ListURL}}{{else}}/app/applications{{end}}">← Applications</a><a href="/app/jobs" data-jobs-return>Browse Jobs</a><a href="/app/applications/review" {{if .ReviewMode}}aria-current="page"{{end}}>Email review</a><a href="/app/applications/easy-apply" {{if .EasyApplyMode}}aria-current="page"{{end}}>Easy Apply</a>{{if and .SelectedApplication (not .EasyApplyMode)}}<a href="/app/jobs/{{.SelectedApplication.JobID}}">View job ↗</a>{{end}}</nav>{{end}}
   <div class="page-head"><div><h1>{{.Title}}</h1><p>{{.Subtitle}}</p></div>{{if eq .Active "dashboard"}}<a class="btn primary" href="/app/collect">＋ Collect New Jobs</a>{{end}}</div>
   {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
   {{if .ActionError}}<div class="alert" role="alert">{{.ActionError}}</div>{{end}}
@@ -45,12 +45,12 @@
       <div class="kpi"><div class="kpi-icon green">✓</div><div><div class="value">{{.Stats.CompletedTotal}}</div><div class="label">Completed Applications</div><div class="hint good">{{.Stats.SentTotal}} email sent · {{.Stats.AppliedTotal}} LinkedIn applied</div></div></div>
     </section>
     <section class="dashboard-grid">
-      <div class="panel"><div class="panel-head"><h2>Inbox · New to Review</h2><a class="sub" href="/app/jobs">Review Inbox →</a></div>
+      <div class="panel"><div class="panel-head"><h2>Inbox · New to Review</h2><a class="sub" href="/app/jobs?review=UNREVIEWED">Review Inbox →</a></div>
       {{if .Jobs}}<div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table><thead><tr><th>Job Title</th><th>Company</th><th>Status</th></tr></thead><tbody>
       {{range .Jobs}}<tr><td><a class="job-link" href="{{detailURL "/app/jobs/" .ID $.ListURL}}">{{.Title}}</a></td><td>{{.Company}}</td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td></tr>{{end}}
       </tbody></table></div>{{else}}<div class="empty">Inbox clear. <a class="job-link" href="/app/collect">Collect new jobs →</a></div>{{end}}</div>
       <div class="panel"><div class="panel-head"><h2>Next actions</h2></div><div class="attention-list">
- <a class="attention-link" href="/app/jobs"><span class="attention-number">{{.Stats.InboxTotal}}</span><div><b>Review new jobs →</b><small>Shortlist, save for later, or skip</small></div></a>
+ <a class="attention-link" href="/app/jobs?review=UNREVIEWED"><span class="attention-number">{{.Stats.InboxTotal}}</span><div><b>Review new jobs →</b><small>Shortlist, save for later, or skip</small></div></a>
  <a class="attention-link" href="/app/jobs?review=SHORTLISTED"><span class="attention-number">{{.Stats.ShortlistedTotal}}</span><div><b>Review shortlist →</b><small>Start applications only when you are ready</small></div></a>
  <a class="attention-link" href="/app/applications/review"><span class="attention-number">{{.Stats.DraftTotal}}</span><div><b>Review email drafts →</b><small>Check content and attachments in Gmail</small></div></a>
  <a class="attention-link" href="/app/applications/easy-apply"><span class="attention-number">{{.Stats.EasyReadyTotal}} / {{.Stats.InProgressTotal}}</span><div><b>Continue Easy Apply →</b><small>Ready / in progress · manual LinkedIn submission</small></div></a>
@@ -129,7 +129,7 @@
         <label class="filter-field">Location<select class="control" name="location"><option value="">All locations</option>{{range .Locations}}<option value="{{.}}" {{if eq $.LocationFilter .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
         <label class="filter-field">Method<select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{channelLabel .}}</option>{{end}}</select></label>
         <label class="filter-field">Status<select class="control" name="state"><option value="">All states</option>{{range .States}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{stateLabel .}}</option>{{end}}</select></label>
-        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" href="/app/jobs?review={{.ReviewFilter}}{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}">Reset</a>
+        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" data-jobs-reset href="/app/jobs?review={{.ReviewFilter}}{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}">Reset</a>
       </form>
 
       {{if .RunFilter}}<div class="run-scope">Collection run #{{.RunFilter}} · <a class="job-link" href="/app/jobs?review={{.ReviewFilter}}">Leave run scope</a></div>{{end}}
