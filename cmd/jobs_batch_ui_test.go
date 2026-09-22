@@ -115,7 +115,7 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 		Title: "Jobs", Subtitle: "Database workbench", Active: "jobs", CSRF: "csrf",
 		CandidateName: "Candidate", CandidateInitials: "C", GmailConnected: true,
 		Query: "sales", LocationFilter: "Jakarta", ReviewFilter: models.JobReviewShortlisted,
-		SelectedJobsCount: 2, SelectedEmailCount: 1, SelectedOtherCount: 1,
+		SelectedJobsCount: 2, SelectedEmailCount: 1, SelectedOtherCount: 1, SelectableJobsCount: 2,
 		Jobs: []appJobRow{
 			{ID: "101", Title: "Sales Executive", Company: "Example", Location: "Jakarta", Method: "EMAIL", State: "NOT_APPLIED", Email: "jobs@example.com", ReviewState: models.JobReviewShortlisted, Selected: true},
 			{ID: "102", Title: "Account Executive", Company: "Review", Location: "Bogor", Method: "UNKNOWN", State: "NOT_APPLIED", ReviewState: models.JobReviewShortlisted, Selected: true},
