@@ -448,6 +448,21 @@ func (s *Store) SetTag(id, status, notes string) error {
 	return nil
 }
 
+func (s *Store) ensureReviewStateCompatibleWithApplication(id, state string) error {
+	if state == models.JobReviewShortlisted {
+		return nil
+	}
+	var appState string
+	err := s.db.QueryRow(`SELECT state FROM applications WHERE job_id=?`, id).Scan(&appState)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("job %s has application state %s; remove the application before moving the job to %s", id, appState, state)
+}
+
 // SetJobReviewState persists one deliberate user triage decision. Re-collection
 // never calls this method, so subsequent Upsert operations preserve the choice.
 func (s *Store) SetJobReviewState(id, state, reason string) error {
@@ -458,6 +473,9 @@ func (s *Store) SetJobReviewState(id, state, reason string) error {
 	state, ok := models.NormalizeJobReviewState(state)
 	if !ok {
 		return fmt.Errorf("invalid job review state %q", state)
+	}
+	if err := s.ensureReviewStateCompatibleWithApplication(id, state); err != nil {
+		return err
 	}
 	reason = strings.TrimSpace(reason)
 	reviewedAt := NowISO()
@@ -503,6 +521,11 @@ func (s *Store) BulkSetJobReviewState(ids []string, state, reason string) (int, 
 	}
 	if len(clean) == 0 {
 		return 0, nil
+	}
+	for _, id := range clean {
+		if err := s.ensureReviewStateCompatibleWithApplication(id, state); err != nil {
+			return 0, err
+		}
 	}
 
 	tx, err := s.db.Begin()
