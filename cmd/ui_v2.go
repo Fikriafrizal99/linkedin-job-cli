@@ -115,6 +115,7 @@ type appPageData struct {
 	SelectedEmailCount                             int
 	SelectedEasyApplyCount                         int
 	SelectedOtherCount                             int
+	SelectableJobsCount                            int
 	GmailCredentialsPath                           string
 	GmailTokenPath                                 string
 	GmailCredentialsFound                          bool
@@ -870,6 +871,9 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				continue
 			}
 			pd.Jobs = append(pd.Jobs, uiJobRow(j, state))
+			if state == "NOT_APPLIED" {
+				pd.SelectableJobsCount++
+			}
 		}
 		if len(parts) > 1 {
 			pd.Title, pd.Subtitle = "Job Detail", "Review the collected job data and decide whether it should enter the application pipeline."
