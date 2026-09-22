@@ -105,28 +105,30 @@
       </section>
     {{else}}
       <nav class="triage-nav" aria-label="Job review views">
-        <a href="/app/jobs?review=UNREVIEWED" {{if eq .ReviewFilter "UNREVIEWED"}}aria-current="page"{{end}}>Inbox <span>{{.Stats.InboxTotal}}</span></a>
-        <a href="/app/jobs?review=SHORTLISTED" {{if eq .ReviewFilter "SHORTLISTED"}}aria-current="page"{{end}}>Shortlisted <span>{{.Stats.ShortlistedTotal}}</span></a>
-        <a href="/app/jobs?review=LATER" {{if eq .ReviewFilter "LATER"}}aria-current="page"{{end}}>Later <span>{{.Stats.LaterTotal}}</span></a>
-        <a href="/app/jobs?review=SKIPPED" {{if eq .ReviewFilter "SKIPPED"}}aria-current="page"{{end}}>Skipped <span>{{.Stats.SkippedTotal}}</span></a>
-        <a href="/app/jobs?review=ALL" {{if eq .ReviewFilter "ALL"}}aria-current="page"{{end}}>All Jobs <span>{{.Stats.JobsTotal}}</span></a>
+        <a href="/app/jobs?review=UNREVIEWED{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}" {{if eq .ReviewFilter "UNREVIEWED"}}aria-current="page"{{end}}>Inbox <span>{{.Stats.InboxTotal}}</span></a>
+        <a href="/app/jobs?review=SHORTLISTED{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}" {{if eq .ReviewFilter "SHORTLISTED"}}aria-current="page"{{end}}>Shortlisted <span>{{.Stats.ShortlistedTotal}}</span></a>
+        <a href="/app/jobs?review=LATER{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}" {{if eq .ReviewFilter "LATER"}}aria-current="page"{{end}}>Later <span>{{.Stats.LaterTotal}}</span></a>
+        <a href="/app/jobs?review=SKIPPED{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}" {{if eq .ReviewFilter "SKIPPED"}}aria-current="page"{{end}}>Skipped <span>{{.Stats.SkippedTotal}}</span></a>
+        <a href="/app/jobs?review=ALL{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}" {{if eq .ReviewFilter "ALL"}}aria-current="page"{{end}}>All Jobs <span>{{.Stats.JobsTotal}}</span></a>
       </nav>
       <form class="toolbar" method="get" action="/app/jobs">
         <input type="hidden" name="review" value="{{.ReviewFilter}}">
+        {{if .RunFilter}}<input type="hidden" name="run" value="{{.RunFilter}}">{{end}}
         <input class="control search" type="search" name="q" value="{{.Query}}" placeholder="Search jobs or companies…" aria-label="Search jobs">
         <label class="filter-field">Location<select class="control" name="location"><option value="">All locations</option>{{range .Locations}}<option value="{{.}}" {{if eq $.LocationFilter .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
         <label class="filter-field">Method<select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{channelLabel .}}</option>{{end}}</select></label>
         <label class="filter-field">Status<select class="control" name="state"><option value="">All states</option>{{range .States}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{stateLabel .}}</option>{{end}}</select></label>
-        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" href="/app/jobs?review={{.ReviewFilter}}">Reset</a>
+        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" href="/app/jobs?review={{.ReviewFilter}}{{if .RunFilter}}&amp;run={{.RunFilter}}{{end}}">Reset</a>
       </form>
 
+      {{if .RunFilter}}<div class="run-scope">Collection run #{{.RunFilter}} · <a class="job-link" href="/app/jobs?review={{.ReviewFilter}}">Leave run scope</a></div>{{end}}
       <div class="results-summary">{{.TotalRows}} {{reviewLabel .ReviewFilter}} job(s){{if .Filtered}} match your filters{{end}}<span>{{if eq .ReviewFilter "UNREVIEWED"}}Decide which jobs to pursue.{{else if eq .ReviewFilter "SHORTLISTED"}}Positive decisions ready for application handoff.{{else if eq .ReviewFilter "SKIPPED"}}Stored for history; excluded from active execution.{{else}}Triage decisions remain editable.{{end}}</span></div>
       <form method="post" id="bulk-jobs-form">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="filter_q" value="{{.Query}}">
         <input type="hidden" name="filter_location" value="{{.LocationFilter}}">
         <input type="hidden" name="filter_method" value="{{.MethodFilter}}">
-        <input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_review" value="{{.ReviewFilter}}"><input type="hidden" name="filter_page" value="{{.Page}}">
+        <input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_review" value="{{.ReviewFilter}}">{{if .RunFilter}}<input type="hidden" name="filter_run" value="{{.RunFilter}}">{{end}}<input type="hidden" name="filter_page" value="{{.Page}}">
         <div class="bulk-bar">
           <div class="bulk-primary-row">
             <div class="bulk-select">
@@ -547,7 +549,8 @@
           <button class="btn {{if .CollectMessage}}ghost{{else}}primary{{end}}" id="collect-submit" type="submit" style="margin-top:14px">Start Collecting</button>
           <div class="footer-note">Runs every query against every location (maximum 50 combinations). Each search can return up to 100 listings. Existing LinkedIn job IDs are skipped before detail fetching. This does not start applications.</div>
         </form>
-        {{if .CollectMessage}}<a class="btn primary" style="margin-top:16px" href="/app/jobs">Browse collected jobs →</a><div class="collect-summary"><div class="mini"><b>{{.CollectSearchRuns}}</b><span>Search combinations</span></div><div class="mini"><b>{{.CollectSearched}}</b><span>Listings scanned</span></div><div class="mini"><b>{{.CollectNew}}</b><span>New candidates</span></div><div class="mini"><b>{{.CollectPersisted}}</b><span>Jobs saved</span></div><div class="mini"><b>{{.CollectExactDuplicates}} / {{.CollectLikelyReposts}}</b><span>Duplicates / likely reposts</span></div></div>{{end}}
+        {{if .CollectMessage}}{{if and .CollectRunID (gt .CollectNew 0)}}<a class="btn primary" style="margin-top:16px" href="/app/jobs?review=UNREVIEWED&amp;run={{.CollectRunID}}">Review {{.CollectNew}} New Jobs →</a>{{else}}<a class="btn ghost" style="margin-top:16px" href="/app/jobs">Open Jobs Inbox →</a>{{end}}<div class="collect-summary"><div class="mini"><b>{{.CollectSearchRuns}}</b><span>Search combinations</span></div><div class="mini"><b>{{.CollectSearched}}</b><span>Listings scanned</span></div><div class="mini"><b>{{.CollectNew}}</b><span>New candidates</span></div><div class="mini"><b>{{.CollectPersisted}}</b><span>Jobs saved</span></div><div class="mini"><b>{{.CollectExactDuplicates}} / {{.CollectLikelyReposts}}</b><span>Duplicates / likely reposts</span></div></div>{{end}}
+      {{if .CollectionRuns}}<div class="content-card" style="margin-top:14px"><div class="content-pad"><h3>Recent Collection Runs</h3><div class="file-list">{{range .CollectionRuns}}<div class="file-card"><div><strong>Run #{{.ID}} · {{date .StartedAt}}</strong><small>{{.SearchedCount}} scanned · {{.NewCount}} new · {{.PersistedCount}} saved · {{.Status}}</small></div><a class="btn ghost" href="/app/jobs?review=UNREVIEWED&amp;run={{.ID}}">Review remaining →</a></div>{{end}}</div></div></div>{{end}}
       </div></section>
       <aside class="content-card"><div class="content-pad"><h2>What happens next</h2><div id="collect-status" class="collect-status" role="status">{{if .CollectMessage}}Collection complete. Browse your saved jobs below.{{else if .CollectError}}Collection could not finish. Check the error and try again.{{else}}Ready when you are. Collection can take a few minutes.{{end}}</div><div class="progress-list"><div class="progress-item"><span class="dot"></span>Anonymous LinkedIn search</div><div class="progress-item"><span class="dot"></span>Read job and application details</div><div class="progress-item"><span class="dot"></span>Skip duplicates and likely reposts</div><div class="progress-item"><span class="dot"></span>Save new jobs to your local database</div></div><div class="footer-note">Results appear when collection finishes. Keep this page open during the run.</div></div></aside>
     </div>
