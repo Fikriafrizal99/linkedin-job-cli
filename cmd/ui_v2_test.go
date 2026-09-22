@@ -57,6 +57,29 @@ func TestAppTemplateHasCanonicalNavigation(t *testing.T) {
 	}
 }
 
+
+func TestJobsNavigationExposesPersistentViewHooks(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var out bytes.Buffer
+	if err := tpl.Execute(&out, appPageData{
+		Title: "Jobs", Active: "jobs", CSRF: "csrf",
+		CandidateName: "Candidate", CandidateInitials: "C",
+		ReviewFilter: models.JobReviewUnreviewed,
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	html := out.String()
+	if !strings.Contains(html, "data-jobs-return") {
+		t.Fatal("Jobs navigation must expose a last-view persistence hook")
+	}
+	if !strings.Contains(html, "data-jobs-reset") {
+		t.Fatal("Jobs Reset must clear the persisted last view")
+	}
+}
+
 func TestAppTemplateApplicationDetailIsReadOnlyUntilActionWiring(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil {
