@@ -543,12 +543,14 @@ Acceptance:
 
 ## Phase 6 — Triage analytics
 
+**Status: implemented; runtime test execution pending.**
+
 Goal: use decisions as visibility and feedback, not silent automation.
 
-- [ ] optional skip reasons;
-- [ ] review funnel counts;
-- [ ] skip-reason summary;
-- [ ] collector-quality insights.
+- [x] optional skip reasons;
+- [x] review funnel counts;
+- [x] skip-reason summary;
+- [x] collector-quality insights.
 
 No automatic query mutation or automatic skipping is included in this phase.
 
