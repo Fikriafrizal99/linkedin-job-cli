@@ -101,6 +101,7 @@ func TestMatchesUIJobFilters(t *testing.T) {
 		Location: "Jakarta, Indonesia",
 		ApplicationMethod: "EMAIL",
 		ApplyEmail: "jobs@example.com",
+		ReviewState: models.JobReviewShortlisted,
 	}
 	if !matchesUIJob(j, models.ApplicationStateApproved, "sales", "Jakarta, Indonesia", "EMAIL", models.ApplicationStateApproved) {
 		t.Fatal("expected matching job filters to pass")
