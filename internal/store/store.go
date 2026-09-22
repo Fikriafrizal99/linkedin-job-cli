@@ -152,6 +152,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := migrateCollectionRuns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := backfillJobReviewState(db); err != nil {
 		db.Close()
 		return nil, err
