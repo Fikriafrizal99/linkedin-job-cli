@@ -78,6 +78,9 @@ func TestOpen_FreshSchema(t *testing.T) {
 	if got.FirstSeen == "" || got.LastSeen == "" || got.ScrapedAt == "" {
 		t.Errorf("collector timestamps missing: first=%q last=%q scraped=%q", got.FirstSeen, got.LastSeen, got.ScrapedAt)
 	}
+	if got.ReviewState != models.JobReviewUnreviewed {
+		t.Errorf("review_state default = %q, want %q", got.ReviewState, models.JobReviewUnreviewed)
+	}
 }
 
 // TestMigrate_OldSchemaDB verifies that a DB created with the pre-fit-engine
@@ -115,6 +118,9 @@ func TestMigrate_OldSchemaDB(t *testing.T) {
 	}
 	if got.CompanyOverview != "" || got.EnrichedAt != "" {
 		t.Errorf("new columns should be empty for legacy row, got overview=%q enriched=%q", got.CompanyOverview, got.EnrichedAt)
+	}
+	if got.ReviewState != models.JobReviewUnreviewed {
+		t.Errorf("legacy review_state=%q want %q", got.ReviewState, models.JobReviewUnreviewed)
 	}
 	// Re-open should be a no-op idempotent migration (no error).
 	if err := migrate(st.db); err != nil {
@@ -154,6 +160,135 @@ func TestSearchFTS_Parity(t *testing.T) {
 	}
 	if got[0].FitScore == nil || *got[0].FitScore != 82 {
 		t.Errorf("fit_score not returned via SearchFTS: %+v", got[0].FitScore)
+	}
+}
+
+func TestSetJobReviewState(t *testing.T) {
+	st := tmpDB(t)
+	if err := st.Upsert(sampleJob("triage1")); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	if err := st.SetJobReviewState("triage1", "skipped", "role mismatch"); err != nil {
+		t.Fatalf("SetJobReviewState: %v", err)
+	}
+	got, err := st.Get("triage1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ReviewState != models.JobReviewSkipped || got.ReviewReason != "role mismatch" || got.ReviewedAt == "" {
+		t.Fatalf("unexpected triage state: state=%q reason=%q reviewed=%q", got.ReviewState, got.ReviewReason, got.ReviewedAt)
+	}
+
+	// Re-collection must preserve the deliberate decision because Upsert does
+	// not own review_state.
+	if err := st.Upsert(sampleJob("triage1")); err != nil {
+		t.Fatalf("re-Upsert: %v", err)
+	}
+	got, _ = st.Get("triage1")
+	if got.ReviewState != models.JobReviewSkipped {
+		t.Fatalf("re-Upsert overwrote review_state: %q", got.ReviewState)
+	}
+
+	if err := st.SetJobReviewState("triage1", models.JobReviewUnreviewed, "must clear"); err != nil {
+		t.Fatalf("reset review state: %v", err)
+	}
+	got, _ = st.Get("triage1")
+	if got.ReviewState != models.JobReviewUnreviewed || got.ReviewReason != "" || got.ReviewedAt != "" {
+		t.Fatalf("UNREVIEWED must clear decision metadata: %+v", got)
+	}
+
+	if err := st.SetJobReviewState("triage1", "NOT_A_STATE", ""); err == nil {
+		t.Fatal("invalid review state should fail")
+	}
+}
+
+func TestBulkSetJobReviewState(t *testing.T) {
+	st := tmpDB(t)
+	for _, id := range []string{"b1", "b2", "b3"} {
+		if err := st.Upsert(sampleJob(id)); err != nil {
+			t.Fatalf("Upsert %s: %v", id, err)
+		}
+	}
+	n, err := st.BulkSetJobReviewState([]string{"b1", "b2", "b2"}, models.JobReviewShortlisted, "")
+	if err != nil {
+		t.Fatalf("BulkSetJobReviewState: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("updated=%d want 2", n)
+	}
+	for _, id := range []string{"b1", "b2"} {
+		j, _ := st.Get(id)
+		if j.ReviewState != models.JobReviewShortlisted || j.ReviewedAt == "" {
+			t.Errorf("%s state=%q reviewed=%q", id, j.ReviewState, j.ReviewedAt)
+		}
+	}
+	j3, _ := st.Get("b3")
+	if j3.ReviewState != models.JobReviewUnreviewed {
+		t.Errorf("b3 state=%q want UNREVIEWED", j3.ReviewState)
+	}
+	count, err := st.CountJobsByReviewState(models.JobReviewShortlisted)
+	if err != nil || count != 2 {
+		t.Fatalf("shortlisted count=%d err=%v", count, err)
+	}
+
+	// A missing job aborts the transaction instead of partially mutating it.
+	if _, err := st.BulkSetJobReviewState([]string{"b3", "missing"}, models.JobReviewSkipped, ""); err == nil {
+		t.Fatal("missing job should fail bulk update")
+	}
+	j3, _ = st.Get("b3")
+	if j3.ReviewState != models.JobReviewUnreviewed {
+		t.Fatalf("rollback failed, b3=%q", j3.ReviewState)
+	}
+}
+
+func TestMigrateReviewStateBackfillsExistingApplications(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "triage-migrate.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw: %v", err)
+	}
+	_, err = raw.Exec(`CREATE TABLE jobs (
+		id TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT, location TEXT,
+		url TEXT NOT NULL, salary_raw TEXT, salary_low REAL, salary_high REAL,
+		salary_currency TEXT, description TEXT, summary TEXT, llm_summary TEXT,
+		remote_type TEXT, status TEXT DEFAULT 'new', notes TEXT, source TEXT,
+		listed_at INTEGER, searched_at TEXT NOT NULL, fetched_at TEXT
+	)`)
+	if err != nil {
+		t.Fatalf("create legacy jobs: %v", err)
+	}
+	if _, err := raw.Exec(applicationSchema); err != nil {
+		t.Fatalf("create applications: %v", err)
+	}
+	if _, err := raw.Exec(`INSERT INTO jobs (id,title,url,searched_at) VALUES
+		('has-app','Has App','http://x/1','2026-09-01T00:00:00Z'),
+		('no-app','No App','http://x/2','2026-09-01T00:00:00Z')`); err != nil {
+		t.Fatalf("insert jobs: %v", err)
+	}
+	if _, err := raw.Exec(`INSERT INTO applications
+		(job_id,state,created_at,updated_at)
+		VALUES ('has-app','READY_EMAIL','2026-09-02T00:00:00Z','2026-09-02T00:00:00Z')`); err != nil {
+		t.Fatalf("insert application: %v", err)
+	}
+	raw.Close()
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open migrated: %v", err)
+	}
+	defer st.Close()
+
+	withApp, _ := st.Get("has-app")
+	withoutApp, _ := st.Get("no-app")
+	if withApp.ReviewState != models.JobReviewShortlisted {
+		t.Errorf("job with application review_state=%q want SHORTLISTED", withApp.ReviewState)
+	}
+	if withApp.ReviewedAt != "2026-09-02T00:00:00Z" {
+		t.Errorf("reviewed_at=%q want application created_at", withApp.ReviewedAt)
+	}
+	if withoutApp.ReviewState != models.JobReviewUnreviewed {
+		t.Errorf("job without application review_state=%q want UNREVIEWED", withoutApp.ReviewState)
 	}
 }
 
