@@ -49,6 +49,13 @@ type appApplicationRow struct {
 	Prepared                                                          bool
 }
 
+type appSkipReasonRow struct {
+	Reason string
+	Label  string
+	Count  int
+	Share  int
+}
+
 type appCVProfile struct {
 	ID, FileName, Path, Keywords string
 	Priority                     int
@@ -99,6 +106,8 @@ type appPageData struct {
 	CollectLikelyReposts                           int
 	CollectRunID                                   int64
 	CollectionRuns                                 []store.CollectionRun
+	SkipReasons                                    []appSkipReasonRow
+	CollectorInsight                               string
 	ActionMessage                                  string
 	ActionError                                    string
 	SelectionNotice                                string
@@ -143,6 +152,7 @@ func newAppTemplate() (*template.Template, error) {
 		"methodLabel":     applicationMethodLabel,
 		"stateLabel":      applicationStateLabel,
 		"reviewLabel":     jobReviewStateLabel,
+		"reviewReasonLabel": jobReviewReasonLabel,
 		"channelLabel":    applicationChannelLabel,
 		"nextStep":        applicationNextStep,
 		"date":            displayDate,
@@ -775,6 +785,21 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		}
 	}
 	pd.Stats.CompletedTotal = pd.Stats.SentTotal + pd.Stats.AppliedTotal
+	if reasons, reasonErr := ws.st.TopJobReviewReasons(models.JobReviewSkipped, 5); reasonErr == nil {
+		for _, row := range reasons {
+			share := 0
+			if pd.Stats.SkippedTotal > 0 {
+				share = row.Count * 100 / pd.Stats.SkippedTotal
+			}
+			pd.SkipReasons = append(pd.SkipReasons, appSkipReasonRow{
+				Reason: row.Reason, Label: jobReviewReasonLabel(row.Reason), Count: row.Count, Share: share,
+			})
+		}
+		if len(pd.SkipReasons) > 0 && pd.Stats.SkippedTotal >= 5 && pd.SkipReasons[0].Share >= 30 {
+			top := pd.SkipReasons[0]
+			pd.CollectorInsight = fmt.Sprintf("%d%% of skipped jobs are tagged %q. This may be a signal to review your collector queries or filters manually.", top.Share, top.Label)
+		}
+	}
 
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/app"), "/")
 	parts := []string{}
@@ -793,12 +818,15 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	}
 	switch section {
 	case "dashboard":
-		pd.Active, pd.Title, pd.Subtitle = "dashboard", "Dashboard", "A focused overview of collected jobs, application progress, and the next actions that need attention."
-		for i, j := range jobs {
-			if i >= 8 {
-				break
+		pd.Active, pd.Title, pd.Subtitle = "dashboard", "Dashboard", "A focused overview of collected jobs, triage decisions, application progress, and the next actions that need attention."
+		for _, j := range jobs {
+			if j.ReviewState != models.JobReviewUnreviewed && j.ReviewState != "" {
+				continue
 			}
 			pd.Jobs = append(pd.Jobs, uiJobRow(j, applicationStateFor(j.ID, apps)))
+			if len(pd.Jobs) >= 8 {
+				break
+			}
 		}
 		pd.SelectedApplication = preferredApplication(apps)
 		if pd.SelectedApplication != nil {
@@ -1218,6 +1246,31 @@ func uiJobRow(j *models.JobPosting, state string) appJobRow {
 func isEasyApplyMethod(method string) bool {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	return method == "LINKEDIN" || method == "EASY_APPLY"
+}
+
+func jobReviewReasonLabel(reason string) string {
+	switch strings.ToUpper(strings.TrimSpace(reason)) {
+	case models.JobReviewReasonRoleMismatch:
+		return "Role mismatch"
+	case models.JobReviewReasonLocation:
+		return "Location"
+	case models.JobReviewReasonExperienceTooHigh:
+		return "Experience too high"
+	case models.JobReviewReasonIndustry:
+		return "Industry"
+	case models.JobReviewReasonCompany:
+		return "Company"
+	case models.JobReviewReasonCompensation:
+		return "Compensation"
+	case models.JobReviewReasonUnclearPosting:
+		return "Unclear posting"
+	case models.JobReviewReasonAlreadySeen:
+		return "Already seen"
+	case models.JobReviewReasonOther:
+		return "Other"
+	default:
+		return nonEmpty(strings.TrimSpace(reason), "Not specified")
+	}
 }
 
 func jobReviewStateLabel(state string) string {
