@@ -487,15 +487,17 @@ Acceptance:
 
 ## Phase 3 — Cross-page selection
 
+**Status: implemented; runtime test execution pending.**
+
 Goal: make pagination a display concern rather than a decision boundary.
 
-- [ ] persist selection across page navigation;
-- [ ] show selected-across-pages count;
-- [ ] add Select visible;
-- [ ] add Select all matching;
-- [ ] add Clear selection;
-- [ ] define filter-change behavior;
-- [ ] add regression/browser tests.
+- [x] persist selection across page navigation;
+- [x] show selected-across-pages count;
+- [x] add Select visible;
+- [x] add Select all matching;
+- [x] add Clear selection;
+- [x] define filter-change behavior;
+- [x] add regression/browser tests.
 
 Acceptance:
 
