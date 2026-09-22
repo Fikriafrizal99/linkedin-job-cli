@@ -93,10 +93,10 @@
           <div class="info-row"><span>Pipeline State</span><span title="{{.SelectedApplication.State}}" class="badge state-{{lower .SelectedApplication.State}}">{{stateLabel .SelectedApplication.State}}</span></div>
           <a class="btn primary" style="display:block;text-align:center;margin-top:12px" href="/app/applications/{{.SelectedJob.ID}}">View Application</a>
         {{else if eq .SelectedJob.ReviewState "SHORTLISTED"}}
-          <div class="footer-note">Compatibility path while Start Applications is implemented: shortlisted jobs can still enter the current queue.</div>
-          <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/queue" style="margin-top:12px" {{if and (not (and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail)) (not (easyApplyMethod .SelectedJob.ApplicationMethod))}}onsubmit="return confirm('This job has no supported email or Easy Apply path. Queue it as NEED_REVIEW anyway?')"{{end}}>
+          <div class="next-step"><strong>Ready to start.</strong>This creates an application record and routes it to Email, Easy Apply, or Needs Attention. It does not send anything.</div>
+          <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/start-application" style="margin-top:12px">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
-            <button class="btn ghost" type="submit" style="width:100%">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}Queue Email Application{{else if easyApplyMethod .SelectedJob.ApplicationMethod}}Queue Easy Apply{{else}}Queue for investigation{{end}}</button>
+            <button class="btn primary" type="submit" style="width:100%">Start Application</button>
           </form>
         {{else}}
           <div class="next-step"><strong>Application execution is intentionally unavailable.</strong>Shortlist this job first if you want to pursue it.</div>
@@ -136,25 +136,20 @@
             <div class="bulk-actions triage-actions">
               <button class="btn ghost selection-control" type="submit" formaction="/app/jobs/selection" name="selection_action" value="all">Select all {{.TotalRows}} matching</button>
               {{if gt .SelectedJobsCount 0}}<button class="btn ghost selection-control" type="submit" formaction="/app/jobs/selection" name="selection_action" value="clear">Clear selection</button>{{end}}
-              <button class="btn primary js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="SHORTLISTED">Shortlist</button>
+              {{if eq .ReviewFilter "SHORTLISTED"}}
+                <button class="btn primary js-start-applications" type="submit" formaction="/app/jobs/bulk/start-applications">Start Applications</button>
+              {{else}}
+                <button class="btn primary js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="SHORTLISTED">Shortlist</button>
+              {{end}}
               <button class="btn ghost js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="LATER">Later</button>
               <button class="btn ghost js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="SKIPPED">Skip</button>
-              {{if eq .ReviewFilter "SHORTLISTED"}}
-                <button class="btn ghost compatibility-action" id="queue-selected-jobs" type="submit" formaction="/app/jobs/bulk/queue">Queue Selected</button>
-                <button class="btn ghost compatibility-action" id="process-selected-jobs" type="submit" formaction="/app/jobs/bulk/process-to-draft">Process Selected</button>
-              {{end}}
             </div>
           </div>
-          <div class="bulk-hint">{{if eq .ReviewFilter "UNREVIEWED"}}Shortlist jobs you want to pursue, park uncertain jobs for Later, or Skip jobs you do not want.{{else}}You can change the triage decision at any time before protected application history exists.{{end}}</div>
-          <div class="selection-detail" id="jobs-selection-detail" role="status">Select jobs to update their decision.</div>
-          {{if eq .ReviewFilter "SHORTLISTED"}}
-          <details class="bulk-options"><summary>Temporary application compatibility actions &amp; attachments</summary>
-          <div class="bulk-hint">Until Start Applications is implemented, Queue/Process remain available only for shortlisted jobs.</div>
-          <label class="checkline" style="margin:0"><input type="checkbox" name="include_need_review" value="1"> Include unsupported jobs as Needs attention (Queue Selected only)</label>
-          {{if not .GmailConnected}}<div class="bulk-hint">Gmail is disconnected. <a class="job-link" href="/app/settings?tab=email">Connect Gmail</a> to create email drafts; Easy Apply is available now.</div>{{end}}
-          {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for created drafts:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
-          </details>
-          {{end}}
+          <div class="bulk-hint">{{if eq .ReviewFilter "UNREVIEWED"}}Shortlist jobs you want to pursue, park uncertain jobs for Later, or Skip jobs you do not want.{{else if eq .ReviewFilter "SHORTLISTED"}}Start Applications creates pipeline records only; Gmail drafts and manual LinkedIn submission happen later in Applications.{{else}}You can change the triage decision while the job has no active application record.{{end}}</div>
+          <div class="selection-detail" id="jobs-selection-detail" role="status"
+            data-email-count="{{.SelectedEmailCount}}" data-easy-count="{{.SelectedEasyApplyCount}}" data-other-count="{{.SelectedOtherCount}}">
+            {{if gt .SelectedJobsCount 0}}{{.SelectedJobsCount}} selected across pages · {{.SelectedEmailCount}} email · {{.SelectedEasyApplyCount}} Easy Apply · {{.SelectedOtherCount}} needs attention.{{else}}Select jobs to update their decision.{{end}}
+          </div>
         </div>
 
         <div class="content-card"><div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table class="jobs-table"><thead><tr><th style="width:42px"><span class="sr-only">Select</span></th><th>Job</th><th>Company</th><th>Location</th><th>Apply</th><th>Decision</th><th>Application</th><th>Added</th></tr></thead><tbody>
