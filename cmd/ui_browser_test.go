@@ -86,6 +86,13 @@ func TestUIBrowserWorkflows(t *testing.T) {
 	}
 	nav("/app/jobs")
 	check(`document.querySelectorAll('.js-job-check').length === 50 && Array.from(document.querySelectorAll('.js-triage-action')).every(x=>x.disabled)`)
+	// A newly checked row must make triage actions available immediately,
+	// before the asynchronous cross-page selection persistence round-trip.
+	eval(`document.querySelector('.js-job-check').click()`)
+	check(`Array.from(document.querySelectorAll('.js-triage-action')).every(x=>!x.disabled)`)
+	wait(`document.getElementById('selected-jobs-count').textContent.includes('1 selected across pages')`)
+	eval(`document.querySelector('.js-job-check').click()`)
+	wait(`document.getElementById('selected-jobs-count').textContent.includes('0 selected across pages')`)
 	eval(`document.getElementById('select-all-jobs').click()`)
 	check(`Array.from(document.querySelectorAll('.js-triage-action')).every(x=>!x.disabled) && document.getElementById('selected-jobs-count').textContent.includes('50')`)
 	eval(`Array.from(document.querySelectorAll('.js-job-check')).slice(25).forEach(x=>x.click())`)
