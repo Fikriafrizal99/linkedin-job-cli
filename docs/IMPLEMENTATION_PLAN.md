@@ -206,6 +206,8 @@ Intentionally not implemented. The Application Engine stops at explicit send and
 
 ## P4 — Job Triage & Cross-Page Selection
 
+**Implementation status: complete; runtime test execution pending.**
+
 Approved next milestone. Detailed product/data contract: [JOB_TRIAGE_WORKFLOW.md](JOB_TRIAGE_WORKFLOW.md).
 
 The goal is to separate **job decision** from **application execution**:
@@ -220,53 +222,53 @@ Collect
 
 ### P4.1 — Persistent triage state
 
-- [ ] add jobs.review_state with UNREVIEWED / SHORTLISTED / LATER / SKIPPED;
-- [ ] add optional review_reason and reviewed_at;
-- [ ] backfill jobs with existing application records to SHORTLISTED;
-- [ ] backfill other existing jobs to UNREVIEWED;
-- [ ] add validated single and bulk store mutations;
-- [ ] add migration/store tests.
+- [x] add jobs.review_state with UNREVIEWED / SHORTLISTED / LATER / SKIPPED;
+- [x] add optional review_reason and reviewed_at;
+- [x] backfill jobs with existing application records to SHORTLISTED;
+- [x] backfill other existing jobs to UNREVIEWED;
+- [x] add validated single and bulk store mutations;
+- [x] add migration/store tests.
 
 ### P4.2 — Jobs Inbox
 
-- [ ] make Jobs default to the UNREVIEWED Inbox;
-- [ ] add Inbox / Shortlisted / Later / Skipped / All Jobs views and counts;
-- [ ] make Shortlist / Later / Skip the primary Inbox actions;
-- [ ] remove skipped jobs from active review immediately;
-- [ ] keep skipped jobs stored and searchable;
-- [ ] keep application lifecycle independent from review_state.
+- [x] make Jobs default to the UNREVIEWED Inbox;
+- [x] add Inbox / Shortlisted / Later / Skipped / All Jobs views and counts;
+- [x] make Shortlist / Later / Skip the primary Inbox actions;
+- [x] remove skipped jobs from active review immediately;
+- [x] keep skipped jobs stored and searchable;
+- [x] keep application lifecycle independent from review_state.
 
 ### P4.3 — Cross-page selection
 
-- [ ] persist selected jobs across pagination;
-- [ ] add Select visible / Select all matching / Clear selection;
-- [ ] show selected-across-pages count;
-- [ ] define explicit behavior when filters change;
-- [ ] remove the 50-record limit from local triage state changes;
-- [ ] retain downstream Gmail/provider batch limits;
-- [ ] add browser/regression tests.
+- [x] persist selected jobs across pagination;
+- [x] add Select visible / Select all matching / Clear selection;
+- [x] show selected-across-pages count;
+- [x] define explicit behavior when filters change;
+- [x] remove the 50-record limit from local triage state changes;
+- [x] retain downstream Gmail/provider batch limits;
+- [x] add browser/regression tests.
 
 ### P4.4 — Shortlist handoff
 
-- [ ] add Start Applications to Shortlisted;
-- [ ] preview Email / Easy Apply / Needs Attention routing before handoff;
-- [ ] only SHORTLISTED jobs enter the normal application batch path;
-- [ ] reuse existing idempotent application queue logic;
-- [ ] stop presenting Queue Selected / Process Selected as the default Inbox workflow.
+- [x] add Start Applications to Shortlisted;
+- [x] preview Email / Easy Apply / Needs Attention routing before handoff;
+- [x] only SHORTLISTED jobs enter the normal application batch path;
+- [x] reuse existing idempotent application queue logic;
+- [x] stop presenting Queue Selected / Process Selected as the default Inbox workflow.
 
 ### P4.5 — Collection run handoff
 
-- [ ] persist collection_runs and collection_run_jobs;
-- [ ] add Review N New Jobs after collection;
-- [ ] support run-scoped review so old jobs do not mix with a fresh collection;
-- [ ] expose collection summary/history.
+- [x] persist collection_runs and collection_run_jobs;
+- [x] add Review N New Jobs after collection;
+- [x] support run-scoped review so old jobs do not mix with a fresh collection;
+- [x] expose collection summary/history.
 
 ### P4.6 — Triage analytics
 
-- [ ] optional skip reasons;
-- [ ] funnel counts;
-- [ ] skip-reason summaries;
-- [ ] collector-quality insights without automatic rejection/query mutation.
+- [x] optional skip reasons;
+- [x] funnel counts;
+- [x] skip-reason summaries;
+- [x] collector-quality insights without automatic rejection/query mutation.
 
 
 ## Explicitly Deferred
