@@ -67,3 +67,6 @@ html{scroll-padding-top:90px} :focus-visible{outline:3px solid #8dc6ff;outline-o
 .triage-detail-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0}
 .compatibility-action{border-style:dashed}
 @media(max-width:760px){.triage-nav{margin-inline:-2px}.triage-detail-actions{grid-template-columns:1fr}.triage-actions{width:100%}.triage-actions .btn{flex:1}}
+
+.triage-reason{grid-column:1/-1;margin:0}
+.run-scope{margin:0 0 10px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:#10243a;color:#a9bdd4;font-size:12px}
