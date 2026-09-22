@@ -548,7 +548,7 @@ func TestApplicationDetailBlocksPrepareForNeedReview(t *testing.T) {
 }
 
 
-func TestJobDetailRendersEasyApplyQueueAction(t *testing.T) {
+func TestJobDetailRendersEasyApplyStartApplicationAction(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -559,6 +559,7 @@ func TestJobDetailRendersEasyApplyQueueAction(t *testing.T) {
 		Company: "Example",
 		URL: "https://www.linkedin.com/jobs/view/123456/",
 		ApplicationMethod: "LINKEDIN",
+		ReviewState: models.JobReviewShortlisted,
 	}
 	var out bytes.Buffer
 	if err := tpl.Execute(&out, appPageData{
@@ -569,13 +570,20 @@ func TestJobDetailRendersEasyApplyQueueAction(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	html := out.String()
-	for _, want := range []string{"EASY_APPLY", "Queue Easy Apply", "READY_EASY_APPLY"} {
+	for _, want := range []string{
+		"EASY_APPLY",
+		"Shortlisted",
+		"Start Application",
+		`action="/app/jobs/easy-job/start-application"`,
+	} {
 		if !strings.Contains(html, want) {
-			t.Errorf("Easy Apply job detail missing %q", want)
+			t.Errorf("Easy Apply shortlisted job detail missing %q", want)
 		}
 	}
-	if strings.Contains(html, "Queue as NEED_REVIEW") {
-		t.Fatal("Easy Apply must not be presented as NEED_REVIEW")
+	for _, unwanted := range []string{"Queue Easy Apply", "Queue as NEED_REVIEW", "READY_EASY_APPLY"} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("pre-handoff Easy Apply job detail should not contain %q", unwanted)
+		}
 	}
 }
 
