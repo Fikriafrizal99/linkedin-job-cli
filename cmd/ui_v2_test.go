@@ -46,8 +46,8 @@ func TestAppTemplateHasCanonicalNavigation(t *testing.T) {
 		"href=\"/app/cv-profiles\"",
 		"href=\"/app/collect\"",
 		"href=\"/app/settings\"",
-		"Jobs Collected",
-		"With Email Contact",
+		"New to Review",
+		"Shortlisted",
 		"In Application Pipeline",
 		"Completed Applications",
 	} {
@@ -279,6 +279,7 @@ func TestQueueApplicationWebActionReadyEmail(t *testing.T) {
 		URL: "https://www.linkedin.com/jobs/view/4467841092",
 		ApplicationMethod: "EMAIL",
 		ApplyEmail: "jobs@example.com",
+		ReviewState: models.JobReviewShortlisted,
 	}
 	if err := st.Upsert(job); err != nil {
 		t.Fatalf("Upsert: %v", err)
