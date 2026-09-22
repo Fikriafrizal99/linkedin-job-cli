@@ -482,9 +482,11 @@ func (s *Store) SetJobReviewState(id, state, reason string) error {
 		return err
 	}
 	reason = strings.TrimSpace(reason)
+	if state != models.JobReviewSkipped {
+		reason = ""
+	}
 	reviewedAt := NowISO()
 	if state == models.JobReviewUnreviewed {
-		reason = ""
 		reviewedAt = ""
 	}
 	res, err := s.db.Exec(`UPDATE jobs SET review_state=?, review_reason=?, reviewed_at=? WHERE id=?`,
@@ -507,9 +509,11 @@ func (s *Store) BulkSetJobReviewState(ids []string, state, reason string) (int, 
 		return 0, fmt.Errorf("invalid job review state %q", state)
 	}
 	reason = strings.TrimSpace(reason)
+	if state != models.JobReviewSkipped {
+		reason = ""
+	}
 	reviewedAt := NowISO()
 	if state == models.JobReviewUnreviewed {
-		reason = ""
 		reviewedAt = ""
 	}
 
