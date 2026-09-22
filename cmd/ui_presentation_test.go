@@ -54,6 +54,30 @@ func TestAppListsPageAndPreserveFilterContext(t *testing.T) {
 	}
 }
 
+func TestApplicationReviewQueryDoesNotBecomeJobTriageFilter(t *testing.T) {
+	t.Setenv("LJ_SETTINGS_FILE", filepath.Join(t.TempDir(), "settings.yaml"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "review-query.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ws := &webServer{st: st}
+
+	pd, err := ws.buildAppPage(httptest.NewRequest("GET", "/app/applications?review=approved", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pd.ReviewFilter != "" {
+		t.Fatalf("Applications review query leaked into Jobs triage filter: %q", pd.ReviewFilter)
+	}
+	if strings.Contains(pd.ActionError, "Unknown Jobs view") {
+		t.Fatalf("application review query incorrectly triggered Jobs triage error: %q", pd.ActionError)
+	}
+	if pd.ActionMessage != "Application approved after manual Gmail draft review. No email was sent." {
+		t.Fatalf("approval message lost: %q", pd.ActionMessage)
+	}
+}
+
 func TestMissingAppPagesKeepNavigationAndReturn404(t *testing.T) {
 	t.Setenv("LJ_SETTINGS_FILE", filepath.Join(t.TempDir(), "settings.yaml"))
 	st, err := store.Open(filepath.Join(t.TempDir(), "ui.db"))
