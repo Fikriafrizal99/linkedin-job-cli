@@ -129,7 +129,7 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 	html := out.String()
 	for _, want := range []string{
 		"Easy Apply 1 of 3",
-		"Continue to LinkedIn Easy Apply →",
+		"Open LinkedIn Easy Apply ↗",
 		"Mark Applied &amp; Next",
 		"name=\"apply_confirm\" value=\"1\" required",
 		"Submission remains human-controlled",
@@ -148,8 +148,8 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 	if strings.Contains(html, "auto-submit") {
 		t.Fatal("Easy Apply UI must not claim or expose auto-submit")
 	}
-	if strings.Contains(html, "target=\"_blank\"") {
-		t.Fatal("Easy Apply primary flow should stay in the same browser tab")
+	if !strings.Contains(html, "target=\"_blank\"") {
+		t.Fatal("LinkedIn Easy Apply should open in a separate tab while the queue stays open")
 	}
 	if strings.Contains(html, "Open Next 3") || strings.Contains(html, "Full job detail") {
 		t.Fatal("Easy Apply queue should be self-contained instead of pushing the user into extra tabs/pages")

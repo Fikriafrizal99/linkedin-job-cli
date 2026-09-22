@@ -105,13 +105,43 @@
     syncConfirmation(form);
   });
 
-  // Easy Apply stays in one browser tab. The POST marks the local application
-  // IN_PROGRESS, then the server redirects this same tab to LinkedIn. When the
-  // user comes back with the browser Back button, force a refresh so the queue
-  // reflects the persisted lifecycle state instead of a stale bfcache snapshot.
-  var openForm = byId('easy-open-form');
-  if (openForm) openForm.addEventListener('submit', function () {
-    try { sessionStorage.setItem('easy-apply-return-refresh', '1'); } catch (_) {}
+  // Keep the queue open as the Easy Apply workstation. LinkedIn itself opens
+  // in one separate tab; the local queue remains visible and is updated only
+  // after the server records that the application was opened.
+  async function openManual(url, endpoint) {
+    var tab = window.open('about:blank', '_blank');
+    if (!tab) throw new Error('Your browser blocked the LinkedIn tab. Allow popups for this local app and try again.');
+    tab.opener = null;
+    try {
+      var csrf = document.querySelector('meta[name="csrf-token"]').content;
+      var response = await fetch(endpoint, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf}, body: 'csrf=' + encodeURIComponent(csrf) + '&no_redirect=1'});
+      if (!response.ok) throw new Error('Could not record progress. Refresh this queue and try again.');
+      tab.location.href = url;
+    } catch (error) { tab.close(); throw error; }
+  }
+  var openForm = byId('easy-open-form'), openStatus = byId('easy-open-status'), confirmForm = byId('easy-confirm-form');
+  if (openForm) openForm.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var button = openForm.querySelector('button');
+    if (button.disabled) return;
+    button.disabled = true;
+    openStatus.textContent = 'Opening LinkedIn in a new tab…';
+    try {
+      await openManual(openForm.dataset.url, openForm.action);
+      var badge = byId('easy-state');
+      if (badge) { badge.textContent = 'In progress'; badge.title = 'IN_PROGRESS'; badge.className = 'badge state-in_progress'; }
+      var opened = byId('easy-opened'); if (opened) opened.textContent = 'Opened just now';
+      if (confirmForm) {
+        confirmForm.dataset.opened = 'true';
+        var submitted = confirmForm.querySelector('input[name=apply_confirm]');
+        if (submitted) { submitted.disabled = false; submitted.checked = false; }
+        syncConfirmation(confirmForm);
+      }
+      var help = byId('easy-confirm-help'); if (help) help.textContent = 'Confirm only when LinkedIn shows your submission is complete.';
+      button.classList.remove('primary'); button.classList.add('ghost');
+      openStatus.textContent = 'LinkedIn opened in a separate tab. Submit there, then return to this Easy Apply queue to confirm.';
+    } catch (error) { openStatus.textContent = error.message; }
+    finally { button.disabled = false; }
   });
 
   // Keep native form submission and its original submitter (including formaction).
@@ -129,15 +159,6 @@
     });
   });
   window.addEventListener('pageshow', function () {
-    if (byId('easy-confirm-form')) {
-      try {
-        if (sessionStorage.getItem('easy-apply-return-refresh') === '1') {
-          sessionStorage.removeItem('easy-apply-return-refresh');
-          location.reload();
-          return;
-        }
-      } catch (_) {}
-    }
     all('form[data-busy]').forEach(function (form) { delete form.dataset.busy; form.removeAttribute('aria-busy'); all('button[data-original-text]', form).forEach(function (b) { b.textContent = b.dataset.originalText; b.removeAttribute('aria-disabled'); }); all('.action-status', form).forEach(function (s) { s.remove(); }); });
     syncJobs(); syncApps(); all('form').forEach(syncConfirmation);
   });

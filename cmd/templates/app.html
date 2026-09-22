@@ -191,15 +191,15 @@
       {{if .SelectedApplication}}
         <section class="content-card"><div class="content-pad">
           <div class="review-progress">
-            <div><span class="review-counter">Easy Apply {{.EasyApplyPosition}} of {{.EasyApplyTotal}}</span><div class="muted">LinkedIn submission stays manual. Review the job here, continue to LinkedIn in this same tab, then use Back to confirm completion.</div></div>
+            <div><span class="review-counter">Easy Apply {{.EasyApplyPosition}} of {{.EasyApplyTotal}}</span><div class="muted">LinkedIn submission stays manual. Review the job here, open LinkedIn in a separate tab, submit there, then return here to confirm completion.</div></div>
             <div class="review-nav"><a class="btn ghost" id="easy-prev" href="{{.EasyApplyPrevURL}}">← Previous</a><a class="btn ghost" id="easy-next" href="{{.EasyApplyNextURL}}">Skip / Next →</a></div>
           </div>
           <div class="detail-title"><div><h2>{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Title}}{{else}}Easy Apply{{end}}</h2><div class="company">{{if .SelectedApplicationJob}}{{.SelectedApplicationJob.Company}}{{end}}</div></div><span id="easy-state" title="{{.SelectedApplication.State}}" class="badge state-{{lower .SelectedApplication.State}}">{{stateLabel .SelectedApplication.State}}</span></div>
 
-          <ol class="step-list" aria-label="Manual application steps"><li>Review job here</li><li>Continue to LinkedIn</li><li>Submit manually</li><li>Back &amp; confirm</li></ol>          <div class="easy-actions">
-            <form id="easy-open-form" data-url="{{.EasyApplyCurrentURL}}" method="post" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/open">
+          <ol class="step-list" aria-label="Manual application steps"><li>Review job here</li><li>Open LinkedIn tab</li><li>Submit manually</li><li>Return &amp; confirm</li></ol>          <div class="easy-actions">
+            <form id="easy-open-form" data-url="{{.EasyApplyCurrentURL}}" method="post" target="_blank" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/open">
               <input type="hidden" name="csrf" value="{{.CSRF}}">
-              <button class="btn {{if eq .SelectedApplication.State "IN_PROGRESS"}}ghost{{else}}primary{{end}}" type="submit" {{if not .EasyApplyCurrentURL}}disabled{{end}}>Continue to LinkedIn Easy Apply →</button>
+              <button class="btn {{if eq .SelectedApplication.State "IN_PROGRESS"}}ghost{{else}}primary{{end}}" type="submit" {{if not .EasyApplyCurrentURL}}disabled{{end}}>Open LinkedIn Easy Apply ↗</button>
             </form>
           </div>
  <div id="easy-open-status" class="action-status" role="status"></div>
