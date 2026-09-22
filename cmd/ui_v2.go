@@ -32,11 +32,15 @@ type appStats struct {
 	AppliedTotal    int
 	NeedReviewTotal int
 	DraftTotal      int
-	ApprovedTotal   int
+	ApprovedTotal    int
+	InboxTotal       int
+	ShortlistedTotal int
+	LaterTotal       int
+	SkippedTotal     int
 }
 
 type appJobRow struct {
-	ID, Title, Company, Location, Method, State, Added, URL, Email string
+	ID, Title, Company, Location, Method, State, ReviewState, Added, URL, Email string
 }
 
 type appApplicationRow struct {
@@ -74,6 +78,7 @@ type appPageData struct {
 	LocationFilter                                 string
 	MethodFilter                                   string
 	StateFilter                                    string
+	ReviewFilter                                   string
 	Locations                                      []string
 	Methods                                        []string
 	States                                         []string
@@ -128,6 +133,7 @@ func newAppTemplate() (*template.Template, error) {
 		"base":            filepath.Base,
 		"methodLabel":     applicationMethodLabel,
 		"stateLabel":      applicationStateLabel,
+		"reviewLabel":     jobReviewStateLabel,
 		"channelLabel":    applicationChannelLabel,
 		"nextStep":        applicationNextStep,
 		"date":            displayDate,
@@ -503,6 +509,18 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd.LocationFilter = strings.TrimSpace(r.URL.Query().Get("location"))
 	pd.MethodFilter = strings.TrimSpace(r.URL.Query().Get("method"))
 	pd.StateFilter = strings.TrimSpace(r.URL.Query().Get("state"))
+	pd.ReviewFilter = strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("review")))
+	if pd.ReviewFilter == "" {
+		pd.ReviewFilter = models.JobReviewUnreviewed
+	}
+	if pd.ReviewFilter != "ALL" {
+		if normalized, ok := models.NormalizeJobReviewState(pd.ReviewFilter); ok {
+			pd.ReviewFilter = normalized
+		} else {
+			pd.ReviewFilter = models.JobReviewUnreviewed
+			pd.ActionError = "Unknown Jobs view. Showing Inbox instead."
+		}
+	}
 	pd.SinceFilter = strings.TrimSpace(r.URL.Query().Get("since"))
 	if pd.SinceFilter != "" {
 		if _, err := time.Parse("2006-01-02", pd.SinceFilter); err != nil {
@@ -535,6 +553,11 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd.CollectError = strings.TrimSpace(r.URL.Query().Get("collect_error"))
 	if v := strings.TrimSpace(r.URL.Query().Get("action_error")); v != "" {
 		pd.ActionError = v
+	}
+	if triage := strings.TrimSpace(r.URL.Query().Get("triage")); triage != "" {
+		if updated, _ := strconv.Atoi(r.URL.Query().Get("updated")); updated > 0 {
+			pd.ActionMessage = fmt.Sprintf("Job triage updated: %d job(s) moved to %s.", updated, jobReviewStateLabel(triage))
+		}
 	}
 	if r.URL.Query().Get("queued") == "1" {
 		pd.ActionMessage = "Application queued successfully."
@@ -662,6 +685,16 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	jobByID := map[string]*models.JobPosting{}
 	for _, j := range jobs {
 		jobByID[j.ID] = j
+		switch j.ReviewState {
+		case models.JobReviewShortlisted:
+			pd.Stats.ShortlistedTotal++
+		case models.JobReviewLater:
+			pd.Stats.LaterTotal++
+		case models.JobReviewSkipped:
+			pd.Stats.SkippedTotal++
+		default:
+			pd.Stats.InboxTotal++
+		}
 		if strings.EqualFold(j.ApplicationMethod, "EMAIL") && strings.TrimSpace(j.ApplyEmail) != "" {
 			pd.Stats.EmailTotal++
 		}
@@ -724,8 +757,23 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.SelectedCVPath, pd.SelectedCVReady = selectedCVStatus(settings.Application.CVProfiles, pd.SelectedApplication.CVProfile)
 		}
 	case "jobs":
-		pd.Active, pd.Title, pd.Subtitle = "jobs", "Jobs", "Filter the collected database, select multiple jobs, and move them into the application workflow."
+		pd.Active = "jobs"
+		switch pd.ReviewFilter {
+		case models.JobReviewShortlisted:
+			pd.Title, pd.Subtitle = "Shortlisted", "Jobs you want to pursue. Review them before starting application execution."
+		case models.JobReviewLater:
+			pd.Title, pd.Subtitle = "Later", "Interesting jobs you intentionally parked for another time."
+		case models.JobReviewSkipped:
+			pd.Title, pd.Subtitle = "Skipped", "Jobs you decided not to pursue. They remain stored for history and deduplication."
+		case "ALL":
+			pd.Title, pd.Subtitle = "All Jobs", "Search the complete collected job history across every triage decision."
+		default:
+			pd.Title, pd.Subtitle = "Jobs Inbox", "Review collected jobs and decide: shortlist, save for later, or skip."
+		}
 		for _, j := range jobs {
+			if pd.ReviewFilter != "ALL" && !strings.EqualFold(j.ReviewState, pd.ReviewFilter) {
+				continue
+			}
 			state := applicationStateFor(j.ID, apps)
 			if !matchesUIJob(j, state, pd.Query, pd.LocationFilter, pd.MethodFilter, pd.StateFilter) {
 				continue
@@ -1090,7 +1138,7 @@ func uiJobRow(j *models.JobPosting, state string) appJobRow {
 	}
 	return appJobRow{
 		ID: j.ID, Title: j.Title, Company: j.Company, Location: j.Location,
-		Method: applicationMethodLabel(j.ApplicationMethod), State: state,
+		Method: applicationMethodLabel(j.ApplicationMethod), State: state, ReviewState: j.ReviewState,
 		Added: displayDate(added), URL: j.URL, Email: j.ApplyEmail,
 	}
 }
@@ -1098,6 +1146,24 @@ func uiJobRow(j *models.JobPosting, state string) appJobRow {
 func isEasyApplyMethod(method string) bool {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	return method == "LINKEDIN" || method == "EASY_APPLY"
+}
+
+func jobReviewStateLabel(state string) string {
+	state = strings.ToUpper(strings.TrimSpace(state))
+	switch state {
+	case models.JobReviewUnreviewed:
+		return "Inbox"
+	case models.JobReviewShortlisted:
+		return "Shortlisted"
+	case models.JobReviewLater:
+		return "Later"
+	case models.JobReviewSkipped:
+		return "Skipped"
+	case "ALL":
+		return "All Jobs"
+	default:
+		return nonEmpty(state, "Inbox")
+	}
 }
 
 func applicationMethodLabel(method string) string {
