@@ -233,3 +233,51 @@ func TestVisibleCheckboxStateWinsOverPersistedSelection(t *testing.T) {
 		t.Fatalf("skipped=%d want 54", skippedCount)
 	}
 }
+
+func TestCollectionRunScopeShowsOnlyRunJobs(t *testing.T) {
+	ws := selectionTestServer(t, 3)
+	runID, err := ws.st.CreateCollectionRun([]string{"Sales"}, []string{"Indonesia"}, "7d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.st.AddCollectionRunJob(runID, "sel-000", store.DuplicateNew, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.st.AddCollectionRunJob(runID, "sel-002", store.DuplicateNew, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.st.FinishCollectionRun(runID, store.CollectionRunFinish{SearchRuns: 1, SearchedCount: 3, NewCount: 2, PersistedCount: 2, Status: "COMPLETED"}); err != nil {
+		t.Fatal(err)
+	}
+
+	path := fmt.Sprintf("/app/jobs?review=UNREVIEWED&run=%d", runID)
+	pd, err := ws.buildAppPage(httptest.NewRequest(http.MethodGet, path, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pd.RunFilter != runID || pd.TotalRows != 2 {
+		t.Fatalf("run scope id=%d rows=%d", pd.RunFilter, pd.TotalRows)
+	}
+	got := map[string]bool{}
+	for _, row := range pd.Jobs {
+		got[row.ID] = true
+	}
+	if !got["sel-000"] || !got["sel-002"] || got["sel-001"] {
+		t.Fatalf("unexpected run-scoped jobs: %+v", pd.Jobs)
+	}
+
+	// Selection scope includes the run id, so leaving the run clears it rather
+	// than carrying hidden choices into the global Inbox.
+	postSelection(t, ws, url.Values{
+		"selection_action": {"all"},
+		"filter_review":    {models.JobReviewUnreviewed},
+		"filter_run":       {fmt.Sprintf("%d", runID)},
+	})
+	global, err := ws.buildAppPage(httptest.NewRequest(http.MethodGet, "/app/jobs", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if global.SelectedJobsCount != 0 || global.SelectionNotice == "" {
+		t.Fatalf("leaving run scope should clear selection: selected=%d notice=%q", global.SelectedJobsCount, global.SelectionNotice)
+	}
+}
