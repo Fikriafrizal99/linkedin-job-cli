@@ -526,13 +526,15 @@ Acceptance:
 
 ## Phase 5 — Collection run handoff
 
+**Status: implemented; runtime test execution pending.**
+
 Goal: each collection has an explicit review entry point.
 
-- [ ] persist collection runs;
-- [ ] associate newly collected jobs with a run;
-- [ ] add Review N New Jobs CTA;
-- [ ] support latest-run and historical-run review;
-- [ ] add collection completion summary.
+- [x] persist collection runs;
+- [x] associate newly collected jobs with a run;
+- [x] add Review N New Jobs CTA;
+- [x] support latest-run and historical-run review;
+- [x] add collection completion summary.
 
 Acceptance:
 
