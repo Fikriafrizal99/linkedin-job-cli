@@ -35,6 +35,7 @@
   {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
   {{if .ActionError}}<div class="alert" role="alert">{{.ActionError}}</div>{{end}}
   {{if .ActionMessage}}<div class="alert success" role="status">{{.ActionMessage}}</div>{{end}}
+  {{if .SelectionNotice}}<div class="alert" role="status">{{.SelectionNotice}}</div>{{end}}
 
   {{if eq .Active "dashboard"}}
     <section class="grid-kpi">
@@ -129,10 +130,12 @@
         <div class="bulk-bar">
           <div class="bulk-primary-row">
             <div class="bulk-select">
-              <label class="checkline"><input id="select-all-jobs" type="checkbox"> Select all visible</label>
-              <span id="selected-jobs-count" class="batch-note" role="status">0 selected</span>
+              <label class="checkline"><input id="select-all-jobs" type="checkbox"> Select visible</label>
+              <span id="selected-jobs-count" class="batch-note" role="status" data-selected-count="{{.SelectedJobsCount}}">{{.SelectedJobsCount}} selected across pages</span>
             </div>
             <div class="bulk-actions triage-actions">
+              <button class="btn ghost selection-control" type="submit" formaction="/app/jobs/selection" name="selection_action" value="all">Select all {{.TotalRows}} matching</button>
+              {{if gt .SelectedJobsCount 0}}<button class="btn ghost selection-control" type="submit" formaction="/app/jobs/selection" name="selection_action" value="clear">Clear selection</button>{{end}}
               <button class="btn primary js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="SHORTLISTED">Shortlist</button>
               <button class="btn ghost js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="LATER">Later</button>
               <button class="btn ghost js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="SKIPPED">Skip</button>
@@ -155,7 +158,7 @@
         </div>
 
         <div class="content-card"><div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table class="jobs-table"><thead><tr><th style="width:42px"><span class="sr-only">Select</span></th><th>Job</th><th>Company</th><th>Location</th><th>Apply</th><th>Decision</th><th>Application</th><th>Added</th></tr></thead><tbody>
-        {{range .Jobs}}<tr class="js-selectable-row"><td><input aria-label="Select {{.Title}} at {{.Company}}" data-method="{{.Method}}" data-state="{{.State}}" class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"></td><td class="table-title"><a class="job-link" href="{{detailURL "/app/jobs/" .ID $.ListURL}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted table-location">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{channelLabel .Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else if eq .Method "EASY_APPLY"}}<small>LinkedIn form · manual submission</small>{{else}}<small>Unsupported destination · skipped by default</small>{{end}}</td><td><span class="badge review-{{lower .ReviewState}}">{{reviewLabel .ReviewState}}</span></td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
+        {{range .Jobs}}<tr class="js-selectable-row"><td><input aria-label="Select {{.Title}} at {{.Company}}" data-method="{{.Method}}" data-state="{{.State}}" class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"{{if .Selected}} checked{{end}}></td><td class="table-title"><a class="job-link" href="{{detailURL "/app/jobs/" .ID $.ListURL}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted table-location">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{channelLabel .Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else if eq .Method "EASY_APPLY"}}<small>LinkedIn form · manual submission</small>{{else}}<small>Unsupported destination · skipped by default</small>{{end}}</td><td><span class="badge review-{{lower .ReviewState}}">{{reviewLabel .ReviewState}}</span></td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
         </tbody></table></div>{{if not .Jobs}}<div class="empty">{{if .Filtered}}No jobs match these filters.{{else if eq .ReviewFilter "UNREVIEWED"}}Inbox clear. No unreviewed jobs need a decision.{{else if eq .ReviewFilter "SHORTLISTED"}}No shortlisted jobs yet. Review the Inbox and shortlist jobs you want to pursue.{{else if eq .ReviewFilter "LATER"}}No jobs saved for later.{{else if eq .ReviewFilter "SKIPPED"}}No skipped jobs.{{else}}No jobs collected yet. <a class="job-link" href="/app/collect">Collect your first jobs →</a>{{end}}</div>{{end}}</div>
       </form>
 <nav class="pagination" aria-label="Results pages"><span>Showing {{.FirstRow}}–{{.LastRow}} of {{.TotalRows}} · 50 per page</span>{{if .PrevPageURL}}<a class="btn ghost" href="{{.PrevPageURL}}">← Previous page</a>{{end}}{{if .NextPageURL}}<a class="btn ghost" href="{{.NextPageURL}}">Next page →</a>{{end}}</nav>
