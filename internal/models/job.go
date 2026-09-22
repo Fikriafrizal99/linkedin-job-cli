@@ -92,6 +92,35 @@ const (
 	JobReviewSkipped = "SKIPPED"
 )
 
+const (
+	JobReviewReasonRoleMismatch      = "ROLE_MISMATCH"
+	JobReviewReasonLocation          = "LOCATION"
+	JobReviewReasonExperienceTooHigh = "EXPERIENCE_TOO_HIGH"
+	JobReviewReasonIndustry          = "INDUSTRY"
+	JobReviewReasonCompany           = "COMPANY"
+	JobReviewReasonCompensation      = "COMPENSATION"
+	JobReviewReasonUnclearPosting    = "UNCLEAR_POSTING"
+	JobReviewReasonAlreadySeen       = "ALREADY_SEEN"
+	JobReviewReasonOther             = "OTHER"
+)
+
+func NormalizeJobReviewReason(reason string) (string, bool) {
+	reason = strings.ToUpper(strings.TrimSpace(reason))
+	if reason == "" {
+		return "", true
+	}
+	switch reason {
+	case JobReviewReasonRoleMismatch, JobReviewReasonLocation,
+		JobReviewReasonExperienceTooHigh, JobReviewReasonIndustry,
+		JobReviewReasonCompany, JobReviewReasonCompensation,
+		JobReviewReasonUnclearPosting, JobReviewReasonAlreadySeen,
+		JobReviewReasonOther:
+		return reason, true
+	default:
+		return "", false
+	}
+}
+
 // NormalizeJobReviewState canonicalizes and validates a persisted job triage
 // state. The boolean is false for unknown values.
 func NormalizeJobReviewState(state string) (string, bool) {
