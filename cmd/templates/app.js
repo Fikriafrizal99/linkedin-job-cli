@@ -63,13 +63,22 @@
   var jobs = all('.js-job-check');
   var syncJobs = selection(jobs, byId('select-all-jobs'), byId('selected-jobs-count'), function (selected) {
     var n = selected.length, queue = byId('queue-selected-jobs'), process = byId('process-selected-jobs');
-    if (!queue) return;
-    queue.disabled = n === 0 || n > 50; process.disabled = n === 0 || n > 25;
-    queue.title = n > 50 ? 'Select at most 50 jobs' : 'Save supported jobs for later preparation';
-    process.title = n > 25 ? 'Select at most 25 jobs' : 'Create email drafts and queue manual Easy Apply jobs';
+    all('.js-triage-action').forEach(function (button) {
+      button.disabled = n === 0;
+      button.title = n === 0 ? 'Select at least one job' : 'Update the selected jobs locally';
+    });
+    if (queue) {
+      queue.disabled = n === 0 || n > 50;
+      queue.title = n > 50 ? 'Select at most 50 jobs' : 'Compatibility action for shortlisted jobs';
+    }
+    if (process) {
+      process.disabled = n === 0 || n > 25;
+      process.title = n > 25 ? 'Select at most 25 jobs' : 'Compatibility action for shortlisted jobs';
+    }
     var email = selected.filter(function (x) { return x.dataset.method === 'EMAIL'; }).length;
     var easy = selected.filter(function (x) { return x.dataset.method === 'EASY_APPLY'; }).length;
-    byId('jobs-selection-detail').textContent = n ? email + ' email · ' + easy + ' Easy Apply · ' + (n - email - easy) + ' unsupported. ' + (n > 25 ? 'Reduce selection to 25 to process. ' : '') + 'Existing protected applications are skipped.' : 'Select jobs to preview their application methods.';
+    var detail = byId('jobs-selection-detail');
+    if (detail) detail.textContent = n ? n + ' selected · ' + email + ' email · ' + easy + ' Easy Apply · ' + (n - email - easy) + ' other. Choose Shortlist, Later, or Skip.' : 'Select jobs to update their decision.';
   });
   var appForm = byId('bulk-app-form');
   var syncApps = selection(all('.js-app-check'), byId('select-all-apps'), byId('selected-count'), function (selected) {
