@@ -111,6 +111,7 @@ func redirectJobTriageResult(w http.ResponseWriter, r *http.Request, state strin
 		"filter_state":    "state",
 		"filter_since":    "since",
 		"filter_review":   "review",
+		"filter_run":      "run",
 		"filter_page":     "page",
 	} {
 		if v := strings.TrimSpace(r.PostFormValue(formKey)); v != "" {
