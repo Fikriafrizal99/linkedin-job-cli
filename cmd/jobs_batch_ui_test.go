@@ -115,9 +115,10 @@ func TestJobsDatabaseRendersBulkWorkflow(t *testing.T) {
 		Title: "Jobs", Subtitle: "Database workbench", Active: "jobs", CSRF: "csrf",
 		CandidateName: "Candidate", CandidateInitials: "C", GmailConnected: true,
 		Query: "sales", LocationFilter: "Jakarta", ReviewFilter: models.JobReviewShortlisted,
+		SelectedJobsCount: 2, SelectedEmailCount: 1, SelectedOtherCount: 1,
 		Jobs: []appJobRow{
-			{ID: "101", Title: "Sales Executive", Company: "Example", Location: "Jakarta", Method: "EMAIL", State: "NOT_APPLIED", Email: "jobs@example.com"},
-			{ID: "102", Title: "Account Executive", Company: "Review", Location: "Bogor", Method: "UNKNOWN", State: "NOT_APPLIED"},
+			{ID: "101", Title: "Sales Executive", Company: "Example", Location: "Jakarta", Method: "EMAIL", State: "NOT_APPLIED", Email: "jobs@example.com", ReviewState: models.JobReviewShortlisted, Selected: true},
+			{ID: "102", Title: "Account Executive", Company: "Review", Location: "Bogor", Method: "UNKNOWN", State: "NOT_APPLIED", ReviewState: models.JobReviewShortlisted, Selected: true},
 		},
 		Attachments: []appAttachment{{ID: "portfolio-1", Label: "Portfolio", Kind: "portfolio", Exists: true}},
 	}
@@ -177,8 +178,11 @@ func TestShortlistedStartApplicationsDoesNotRequireGmail(t *testing.T) {
 	if strings.Contains(html, "Process Selected") || strings.Contains(html, "Queue Selected") {
 		t.Fatal("legacy execution actions should not remain in the Shortlisted UI")
 	}
-	if strings.Contains(html, "Connect Gmail") {
-		t.Fatal("Start Applications must not require Gmail")
+	// Gmail connectivity must not gate the local Shortlisted -> Applications handoff.
+	// The template may contain Gmail setup copy elsewhere, so assert the actual
+	// Start Applications control remains available while GmailConnected is false.
+	if !strings.Contains(html, `formaction="/app/jobs/bulk/start-applications"`) {
+		t.Fatal("Start Applications must remain available when Gmail is disconnected")
 	}
 }
 
