@@ -80,6 +80,7 @@ type appPageData struct {
 	MethodFilter                                   string
 	StateFilter                                    string
 	ReviewFilter                                   string
+	RunFilter                                      int64
 	Locations                                      []string
 	Methods                                        []string
 	States                                         []string
@@ -96,6 +97,8 @@ type appPageData struct {
 	CollectPersisted                               int
 	CollectExactDuplicates                         int
 	CollectLikelyReposts                           int
+	CollectRunID                                   int64
+	CollectionRuns                                 []store.CollectionRun
 	ActionMessage                                  string
 	ActionError                                    string
 	SelectionNotice                                string
@@ -536,6 +539,16 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			pd.SelectionNotice = "Job selection was cleared because the Jobs view or filters changed."
 		}
 	}
+	if strings.HasPrefix(r.URL.Path, "/app/jobs") {
+		if rawRun := strings.TrimSpace(r.URL.Query().Get("run")); rawRun != "" {
+			runID, err := strconv.ParseInt(rawRun, 10, 64)
+			if err != nil || runID <= 0 {
+				pd.ActionError = "Invalid collection run. Showing the current Jobs view without run scope."
+			} else {
+				pd.RunFilter = runID
+			}
+		}
+	}
 	pd.SinceFilter = strings.TrimSpace(r.URL.Query().Get("since"))
 	if pd.SinceFilter != "" {
 		if _, err := time.Parse("2006-01-02", pd.SinceFilter); err != nil {
@@ -688,6 +701,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		pd.CollectPersisted, _ = strconv.Atoi(r.URL.Query().Get("persisted"))
 		pd.CollectExactDuplicates, _ = strconv.Atoi(r.URL.Query().Get("exact"))
 		pd.CollectLikelyReposts, _ = strconv.Atoi(r.URL.Query().Get("reposts"))
+		pd.CollectRunID, _ = strconv.ParseInt(r.URL.Query().Get("run_id"), 10, 64)
 		pd.CollectMessage = fmt.Sprintf("Collection finished: %d search combination(s), %d listings scanned, %d new, %d persisted.", pd.CollectSearchRuns, pd.CollectSearched, pd.CollectNew, pd.CollectPersisted)
 	}
 
@@ -799,7 +813,18 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		default:
 			pd.Title, pd.Subtitle = "Jobs Inbox", "Review collected jobs and decide: shortlist, save for later, or skip."
 		}
+		var runJobIDs map[string]bool
+		if pd.RunFilter > 0 {
+			runJobIDs, err = ws.st.CollectionRunJobIDs(pd.RunFilter, true)
+			if err != nil {
+				return pd, err
+			}
+			pd.Subtitle += fmt.Sprintf(" Showing jobs from collection run #%d.", pd.RunFilter)
+		}
 		for _, j := range jobs {
+			if runJobIDs != nil && !runJobIDs[j.ID] {
+				continue
+			}
 			if pd.ReviewFilter != "ALL" && !strings.EqualFold(j.ReviewState, pd.ReviewFilter) {
 				continue
 			}
@@ -965,6 +990,9 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		pd.Active, pd.Title, pd.Subtitle = "cv-profiles", "CV Profiles", "Manage the CV and supporting files used during preparation and Gmail draft creation."
 	case "collect":
 		pd.Active, pd.Title, pd.Subtitle = "collect", "Collect LinkedIn Jobs", "Collect bounded LinkedIn search results into the local jobs database for review and batch processing."
+		if runs, runErr := ws.st.ListCollectionRuns(8); runErr == nil {
+			pd.CollectionRuns = runs
+		}
 	case "settings":
 		pd.Active, pd.Title, pd.Subtitle = "settings", "Settings", "Connect Gmail and inspect the preferences used by this local command center."
 	default:
