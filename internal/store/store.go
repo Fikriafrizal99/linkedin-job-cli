@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     application_method TEXT,
     application_instruction TEXT,
     detail_status TEXT,
+    review_state TEXT NOT NULL DEFAULT 'UNREVIEWED',
+    review_reason TEXT,
+    reviewed_at TEXT,
     company_overview TEXT,
     industry TEXT,
     tech_stack TEXT,
@@ -112,6 +115,9 @@ var addColumns = []struct {
 	{"application_method", "TEXT"},
 	{"application_instruction", "TEXT"},
 	{"detail_status", "TEXT"},
+	{"review_state", "TEXT NOT NULL DEFAULT 'UNREVIEWED'"},
+	{"review_reason", "TEXT"},
+	{"reviewed_at", "TEXT"},
 }
 
 // Store is the SQLite persistence layer.
@@ -143,6 +149,10 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := migrateApplications(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := backfillJobReviewState(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -198,12 +208,33 @@ func migrate(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_jobs_fit_score ON jobs(fit_score)`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_application_method ON jobs(application_method)`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_apply_email ON jobs(apply_email)`,
+		`CREATE INDEX IF NOT EXISTS idx_jobs_review_state ON jobs(review_state)`,
 	} {
 		if _, err := db.Exec(idx); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// backfillJobReviewState initializes the decision layer after the applications
+// table exists. Jobs already in the application lifecycle are treated as
+// SHORTLISTED; every other legacy job remains UNREVIEWED. The update is
+// idempotent and never overwrites an explicit non-UNREVIEWED decision.
+func backfillJobReviewState(db *sql.DB) error {
+	if _, err := db.Exec(`UPDATE jobs SET review_state=?
+		WHERE review_state IS NULL OR TRIM(review_state)=''`, models.JobReviewUnreviewed); err != nil {
+		return err
+	}
+	_, err := db.Exec(`
+UPDATE jobs
+SET review_state=?,
+    reviewed_at=COALESCE(NULLIF(reviewed_at,''),
+        (SELECT created_at FROM applications WHERE applications.job_id=jobs.id LIMIT 1))
+WHERE review_state=?
+  AND EXISTS (SELECT 1 FROM applications WHERE applications.job_id=jobs.id)
+`, models.JobReviewShortlisted, models.JobReviewUnreviewed)
+	return err
 }
 
 // backfillSalarySource infers the origin of pre-existing parsed salaries so the
@@ -417,6 +448,99 @@ func (s *Store) SetTag(id, status, notes string) error {
 	return nil
 }
 
+// SetJobReviewState persists one deliberate user triage decision. Re-collection
+// never calls this method, so subsequent Upsert operations preserve the choice.
+func (s *Store) SetJobReviewState(id, state, reason string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("empty job id")
+	}
+	state, ok := models.NormalizeJobReviewState(state)
+	if !ok {
+		return fmt.Errorf("invalid job review state %q", state)
+	}
+	reason = strings.TrimSpace(reason)
+	reviewedAt := NowISO()
+	if state == models.JobReviewUnreviewed {
+		reason = ""
+		reviewedAt = ""
+	}
+	res, err := s.db.Exec(`UPDATE jobs SET review_state=?, review_reason=?, reviewed_at=? WHERE id=?`,
+		state, reason, reviewedAt, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return fmt.Errorf("job %s not found", id)
+	}
+	return nil
+}
+
+// BulkSetJobReviewState applies one triage decision to a set of jobs in a
+// single transaction. IDs are trimmed and deduplicated. Any missing ID rolls
+// back the batch so the caller never gets a partially-applied decision.
+func (s *Store) BulkSetJobReviewState(ids []string, state, reason string) (int, error) {
+	state, ok := models.NormalizeJobReviewState(state)
+	if !ok {
+		return 0, fmt.Errorf("invalid job review state %q", state)
+	}
+	reason = strings.TrimSpace(reason)
+	reviewedAt := NowISO()
+	if state == models.JobReviewUnreviewed {
+		reason = ""
+		reviewedAt = ""
+	}
+
+	seen := map[string]bool{}
+	clean := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		clean = append(clean, id)
+	}
+	if len(clean) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	for _, id := range clean {
+		res, err := tx.Exec(`UPDATE jobs SET review_state=?, review_reason=?, reviewed_at=? WHERE id=?`,
+			state, reason, reviewedAt, id)
+		if err != nil {
+			return 0, err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return 0, fmt.Errorf("job %s not found", id)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(clean), nil
+}
+
+// CountJobsByReviewState returns the number of jobs in one validated triage
+// state. It is used by the upcoming Inbox/Shortlisted/Later/Skipped counters.
+func (s *Store) CountJobsByReviewState(state string) (int64, error) {
+	state, ok := models.NormalizeJobReviewState(state)
+	if !ok {
+		return 0, fmt.Errorf("invalid job review state %q", state)
+	}
+	var n int64
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE review_state=?`, state).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // SetEnrichmentAndScore persists the LLM-extracted structured fields for a job,
 // stamping enriched_at and scored_at. remote_type is refined only when the LLM
 // returned a non-empty work arrangement (so it never clobbers an existing
@@ -578,6 +702,7 @@ type Filters struct {
 	Source            string
 	HasEmail          bool
 	NoEmail           bool
+	ReviewState       string
 	MinScore          int  // 0 = no score filter
 	SortByScore       bool // order by fit_score desc instead of salary
 	SortBySearched    bool // order by searched_at desc (newest first); overrides SortByScore
@@ -643,6 +768,14 @@ func (s *Store) List(f Filters) ([]*models.JobPosting, error) {
 	if f.NoEmail {
 		q += ` AND COALESCE(apply_email,'')=''`
 	}
+	if f.ReviewState != "" {
+		state, ok := models.NormalizeJobReviewState(f.ReviewState)
+		if !ok {
+			return nil, fmt.Errorf("invalid job review state %q", f.ReviewState)
+		}
+		q += ` AND review_state=?`
+		args = append(args, state)
+	}
 	if f.MinScore > 0 {
 		q += ` AND fit_score>=?`
 		args = append(args, f.MinScore)
@@ -677,6 +810,7 @@ func (s *Store) SearchFTS(expr string, limit int) ([]*models.JobPosting, error) 
   j.salary_currency,j.salary_source,j.description,j.short_description,j.summary,j.llm_summary,j.remote_type,j.status,j.notes,j.source,j.listed_at,
   j.searched_at,j.fetched_at,j.posted_at,j.posted_at_estimated,j.first_seen,j.last_seen,j.scraped_at,
   j.apply_email,j.apply_emails,j.apply_url,j.application_method,j.application_instruction,j.detail_status,
+  j.review_state,j.review_reason,j.reviewed_at,
   j.company_overview,j.industry,j.tech_stack,j.seniority,j.employment_type,
   j.years_experience,j.company_size_band,j.company_stage,j.is_founding_role,j.fit_score,
   j.fit_reason,j.content_hash,j.structural_hash,j.duplicate_classification,j.duplicate_of_job_id,j.enriched_at,j.scored_at,
@@ -826,6 +960,7 @@ const jobCols = `SELECT id,title,company,location,url,salary_raw,salary_low,sala
   salary_currency,salary_source,description,short_description,summary,llm_summary,remote_type,status,notes,source,listed_at,
   searched_at,fetched_at,posted_at,posted_at_estimated,first_seen,last_seen,scraped_at,
   apply_email,apply_emails,apply_url,application_method,application_instruction,detail_status,
+  review_state,review_reason,reviewed_at,
   company_overview,industry,tech_stack,seniority,employment_type,
   years_experience,company_size_band,company_stage,is_founding_role,fit_score,
   fit_reason,content_hash,structural_hash,duplicate_classification,duplicate_of_job_id,enriched_at,scored_at,
@@ -840,6 +975,7 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 	var sl, sh sql.NullFloat64
 	var company, location, salaryRaw, cur, salarySource, desc, shortDesc, summary, llm, remote, status, notes, source, fetched sql.NullString
 	var postedAt, firstSeen, lastSeen, scrapedAt, applyEmail, applyEmails, applyURL, applicationMethod, applicationInstruction, detailStatus sql.NullString
+	var reviewState, reviewReason, reviewedAt sql.NullString
 	var listed, postedAtEstimated sql.NullInt64
 	var companyOverview, industry, techStack, seniority, employmentType, companySizeBand, companyStage, fitReason, contentHash, structuralHash, duplicateClassification, duplicateOfJobID, enrichedAt, scoredAt sql.NullString
 	var rubricScores sql.NullString
@@ -848,6 +984,7 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 		&cur, &salarySource, &desc, &shortDesc, &summary, &llm, &remote, &status, &notes, &source, &listed, &j.SearchedAt, &fetched,
 		&postedAt, &postedAtEstimated, &firstSeen, &lastSeen, &scrapedAt,
 		&applyEmail, &applyEmails, &applyURL, &applicationMethod, &applicationInstruction, &detailStatus,
+		&reviewState, &reviewReason, &reviewedAt,
 		&companyOverview, &industry, &techStack, &seniority, &employmentType, &yearsExp,
 		&companySizeBand, &companyStage, &isFounding, &fitScore,
 		&fitReason, &contentHash, &structuralHash, &duplicateClassification, &duplicateOfJobID, &enrichedAt, &scoredAt,
@@ -893,6 +1030,12 @@ func scanJob(row scanner) (*models.JobPosting, error) {
 	j.ApplicationMethod = applicationMethod.String
 	j.ApplicationInstruction = applicationInstruction.String
 	j.DetailStatus = detailStatus.String
+	j.ReviewState = reviewState.String
+	if j.ReviewState == "" {
+		j.ReviewState = models.JobReviewUnreviewed
+	}
+	j.ReviewReason = reviewReason.String
+	j.ReviewedAt = reviewedAt.String
 	if j.Status == "" {
 		j.Status = "new"
 	}
