@@ -49,6 +49,13 @@ type JobPosting struct {
 	ApplicationInstruction string   `json:"application_instruction,omitempty"`
 	DetailStatus           string   `json:"detail_status,omitempty"`
 
+	// Persistent user triage decision. This is intentionally independent from
+	// application lifecycle state: Jobs owns pursue/do-not-pursue intent while
+	// applications owns execution progress.
+	ReviewState  string `json:"review_state,omitempty"`
+	ReviewReason string `json:"review_reason,omitempty"`
+	ReviewedAt   string `json:"reviewed_at,omitempty"`
+
 	// Structured enrichment (LLM-extracted). Zero values mean "not enriched."
 	CompanyOverview string `json:"company_overview,omitempty"`
 	Industry        string `json:"industry,omitempty"`
@@ -76,6 +83,25 @@ type JobPosting struct {
 	StructuralHash          string `json:"structural_hash,omitempty"`
 	DuplicateClassification string `json:"duplicate_classification,omitempty"`
 	DuplicateOfJobID        string `json:"duplicate_of_job_id,omitempty"`
+}
+
+const (
+	JobReviewUnreviewed = "UNREVIEWED"
+	JobReviewShortlisted = "SHORTLISTED"
+	JobReviewLater = "LATER"
+	JobReviewSkipped = "SKIPPED"
+)
+
+// NormalizeJobReviewState canonicalizes and validates a persisted job triage
+// state. The boolean is false for unknown values.
+func NormalizeJobReviewState(state string) (string, bool) {
+	state = strings.ToUpper(strings.TrimSpace(state))
+	switch state {
+	case JobReviewUnreviewed, JobReviewShortlisted, JobReviewLater, JobReviewSkipped:
+		return state, true
+	default:
+		return "", false
+	}
 }
 
 // IsEnriched reports whether structured enrichment has run for this job.
