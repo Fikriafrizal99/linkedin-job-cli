@@ -53,3 +53,17 @@ html{scroll-padding-top:90px} :focus-visible{outline:3px solid #8dc6ff;outline-o
 @media(max-width:1050px){.job-detail-layout>aside{grid-row:1}.job-detail-layout{grid-template-columns:minmax(0,1fr)}}
 
 .job-identity{margin-bottom:16px}.application-layout aside .form-grid{grid-template-columns:1fr}.application-layout aside .detail-grid{grid-template-columns:1fr}.application-layout aside>form:first-child{margin-top:0!important}.review-layout aside>.confirmation-block{margin-top:12px}.confirmation-block h3{margin:0 0 10px}
+
+/* Job triage decision workspace. */
+.triage-nav{display:flex;gap:8px;align-items:center;overflow-x:auto;margin:0 0 14px;padding-bottom:2px}
+.triage-nav a{display:flex;align-items:center;gap:7px;white-space:nowrap;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:#10243a;color:#a9bdd4;font-size:12px}
+.triage-nav a:hover{border-color:#5b8fbd;text-decoration:none}
+.triage-nav a[aria-current]{background:#17395f;border-color:#559dff;color:#eef6ff}
+.triage-nav a span{min-width:22px;padding:1px 6px;border-radius:999px;background:#0d1f31;color:#9fb7d0;text-align:center;font-size:10px}
+.review-unreviewed{background:#183653;color:#a9d4ff;border-color:#2b587d}
+.review-shortlisted{background:#123d31;color:#86e0b8;border-color:#24634f}
+.review-later{background:#3b321b;color:#f0cd7b;border-color:#6c572a}
+.review-skipped{background:#302d38;color:#bdb7c9;border-color:#4c4758}
+.triage-detail-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0}
+.compatibility-action{border-style:dashed}
+@media(max-width:760px){.triage-nav{margin-inline:-2px}.triage-detail-actions{grid-template-columns:1fr}.triage-actions{width:100%}.triage-actions .btn{flex:1}}
