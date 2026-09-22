@@ -41,6 +41,7 @@ type appStats struct {
 
 type appJobRow struct {
 	ID, Title, Company, Location, Method, State, ReviewState, Added, URL, Email string
+	Selected bool
 }
 
 type appApplicationRow struct {
@@ -97,6 +98,8 @@ type appPageData struct {
 	CollectLikelyReposts                           int
 	ActionMessage                                  string
 	ActionError                                    string
+	SelectionNotice                                string
+	SelectedJobsCount                              int
 	GmailCredentialsPath                           string
 	GmailTokenPath                                 string
 	GmailCredentialsFound                          bool
@@ -521,6 +524,13 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 				pd.ReviewFilter = models.JobReviewUnreviewed
 				pd.ActionError = "Unknown Jobs view. Showing Inbox instead."
 			}
+		}
+	}
+	selectionScope := ""
+	if strings.HasPrefix(r.URL.Path, "/app/jobs") {
+		selectionScope = normalizedJobSelectionScope(r.URL.Query())
+		if ws.syncJobSelectionScope(selectionScope) {
+			pd.SelectionNotice = "Job selection was cleared because the Jobs view or filters changed."
 		}
 	}
 	pd.SinceFilter = strings.TrimSpace(r.URL.Query().Get("since"))
@@ -973,6 +983,11 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			}
 			if pd.Active == "jobs" {
 				pd.Jobs = pd.Jobs[start:end]
+				selectedJobs := ws.selectedJobsForScope(selectionScope)
+				pd.SelectedJobsCount = len(selectedJobs)
+				for i := range pd.Jobs {
+					pd.Jobs[i].Selected = selectedJobs[pd.Jobs[i].ID]
+				}
 			} else {
 				pd.Applications = pd.Applications[start:end]
 			}
