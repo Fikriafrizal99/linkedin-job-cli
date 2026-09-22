@@ -16,6 +16,30 @@
   document.addEventListener('click', function (e) { if (menu && !menu.contains(e.target)) menu.open = false; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu && menu.open) { menu.open = false; menu.querySelector('summary').focus(); } });
 
+  // Remember the most recent Jobs list view for this browser tab. The URL
+  // remains authoritative for refresh/back/forward; sessionStorage only makes
+  // sidebar/mobile "Jobs" navigation return to the user's last filters.
+  var jobsViewKey = 'linkedin-jobs:last-jobs-view';
+  function isJobsListPath() { return location.pathname === '/app/jobs'; }
+  function currentJobsListURL() { return location.pathname + location.search; }
+  try {
+    if (isJobsListPath()) {
+      sessionStorage.setItem(jobsViewKey, currentJobsListURL());
+    }
+    var savedJobsView = sessionStorage.getItem(jobsViewKey);
+    if (savedJobsView && savedJobsView.indexOf('/app/jobs') === 0) {
+      all('[data-jobs-return]').forEach(function (link) { link.setAttribute('href', savedJobsView); });
+    }
+    all('[data-jobs-reset]').forEach(function (link) {
+      link.addEventListener('click', function () {
+        sessionStorage.removeItem(jobsViewKey);
+      });
+    });
+  } catch (_) {
+    // Storage may be unavailable in restrictive browser modes; URLs still
+    // preserve filters normally, so navigation remains functional.
+  }
+
   // Native GET filters keep the URL as the source of truth.
   var k = byId('collect-keywords'), l = byId('collect-locations'), p = byId('collect-posted'), t = byId('collect-top'), out = byId('collect-preview'), planStatus = byId('collect-plan'), collectSubmit = byId('collect-submit');
   function quote(v) { return '"' + String(v || '').replace(/"/g, '\\"') + '"'; }
