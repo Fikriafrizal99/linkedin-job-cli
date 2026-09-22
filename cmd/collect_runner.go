@@ -22,6 +22,7 @@ type collectRequest struct {
 }
 
 type collectRunResult struct {
+	RunID            int64    `json:"run_id,omitempty"`
 	SearchRuns       int      `json:"search_runs"`
 	Searched         int      `json:"searched"`
 	NewCandidates    int      `json:"new_candidates"`
