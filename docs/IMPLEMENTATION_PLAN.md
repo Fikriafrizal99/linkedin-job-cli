@@ -203,6 +203,72 @@ The bridge is implemented; live sending remains user-authorized per application.
 
 Intentionally not implemented. The Application Engine stops at explicit send and provider-result persistence. Reminder, follow-up email, and response-tracking automation are out of scope.
 
+
+## P4 — Job Triage & Cross-Page Selection
+
+Approved next milestone. Detailed product/data contract: [JOB_TRIAGE_WORKFLOW.md](JOB_TRIAGE_WORKFLOW.md).
+
+The goal is to separate **job decision** from **application execution**:
+
+~~~text
+Collect
+→ Review
+→ Shortlist / Later / Skip
+→ Start Applications
+→ Execute / Track
+~~~
+
+### P4.1 — Persistent triage state
+
+- [ ] add jobs.review_state with UNREVIEWED / SHORTLISTED / LATER / SKIPPED;
+- [ ] add optional review_reason and reviewed_at;
+- [ ] backfill jobs with existing application records to SHORTLISTED;
+- [ ] backfill other existing jobs to UNREVIEWED;
+- [ ] add validated single and bulk store mutations;
+- [ ] add migration/store tests.
+
+### P4.2 — Jobs Inbox
+
+- [ ] make Jobs default to the UNREVIEWED Inbox;
+- [ ] add Inbox / Shortlisted / Later / Skipped / All Jobs views and counts;
+- [ ] make Shortlist / Later / Skip the primary Inbox actions;
+- [ ] remove skipped jobs from active review immediately;
+- [ ] keep skipped jobs stored and searchable;
+- [ ] keep application lifecycle independent from review_state.
+
+### P4.3 — Cross-page selection
+
+- [ ] persist selected jobs across pagination;
+- [ ] add Select visible / Select all matching / Clear selection;
+- [ ] show selected-across-pages count;
+- [ ] define explicit behavior when filters change;
+- [ ] remove the 50-record limit from local triage state changes;
+- [ ] retain downstream Gmail/provider batch limits;
+- [ ] add browser/regression tests.
+
+### P4.4 — Shortlist handoff
+
+- [ ] add Start Applications to Shortlisted;
+- [ ] preview Email / Easy Apply / Needs Attention routing before handoff;
+- [ ] only SHORTLISTED jobs enter the normal application batch path;
+- [ ] reuse existing idempotent application queue logic;
+- [ ] stop presenting Queue Selected / Process Selected as the default Inbox workflow.
+
+### P4.5 — Collection run handoff
+
+- [ ] persist collection_runs and collection_run_jobs;
+- [ ] add Review N New Jobs after collection;
+- [ ] support run-scoped review so old jobs do not mix with a fresh collection;
+- [ ] expose collection summary/history.
+
+### P4.6 — Triage analytics
+
+- [ ] optional skip reasons;
+- [ ] funnel counts;
+- [ ] skip-reason summaries;
+- [ ] collector-quality insights without automatic rejection/query mutation.
+
+
 ## Explicitly Deferred
 
 These remain outside Collector V1 unless explicitly approved:
