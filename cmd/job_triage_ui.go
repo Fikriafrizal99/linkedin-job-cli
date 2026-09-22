@@ -65,6 +65,12 @@ func (ws *webServer) handleAppBulkReviewState(w http.ResponseWriter, r *http.Req
 	if seen == nil {
 		seen = map[string]bool{}
 	}
+	// The submitted page is authoritative for currently visible rows. This
+	// closes the race where an async checkbox persistence request is still in
+	// flight when the user immediately triggers a triage action.
+	for _, id := range r.PostForm["visible_job_id"] {
+		delete(seen, strings.TrimSpace(id))
+	}
 	for _, id := range r.PostForm["job_id"] {
 		id = strings.TrimSpace(id)
 		if id != "" {
