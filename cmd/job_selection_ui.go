@@ -278,6 +278,11 @@ func (ws *webServer) matchingJobIDs(v url.Values) ([]string, error) {
 			continue
 		}
 		state := applicationStateFor(j.ID, apps)
+		// Job bulk selection is only for pre-application triage/handoff.
+		// Once an application exists, continue it from Applications instead.
+		if state != "NOT_APPLIED" {
+			continue
+		}
 		if !matchesUIJob(j, state,
 			strings.TrimSpace(v.Get("q")),
 			strings.TrimSpace(v.Get("location")),
