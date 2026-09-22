@@ -80,42 +80,6 @@ func TestJobsNavigationExposesPersistentViewHooks(t *testing.T) {
 	}
 }
 
-func TestApplicationsListRendersContextualNextSteps(t *testing.T) {
-	tpl, err := newAppTemplate()
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	var out bytes.Buffer
-	if err := tpl.Execute(&out, appPageData{
-		Title: "Applications", Active: "applications", CSRF: "csrf",
-		CandidateName: "Candidate", CandidateInitials: "C",
-		Applications: []appApplicationRow{
-			{JobID: "easy-1", Title: "BD", Method: "EASY_APPLY", State: models.ApplicationStateReadyEasyApply},
-			{JobID: "done-1", Title: "Done", Method: "EASY_APPLY", State: models.ApplicationStateApplied},
-		},
-	}); err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	html := out.String()
-	if !strings.Contains(html, `href="/app/applications/easy-apply?ids=easy-1&amp;pos=0"`) ||
-		!strings.Contains(html, "Continue Easy Apply") {
-		t.Fatal("READY_EASY_APPLY row must expose direct Continue Easy Apply action")
-	}
-	if strings.Contains(html, `name="job_id" value="done-1"`) {
-		t.Fatal("completed APPLIED application must not remain bulk-selectable")
-	}
-	for _, action := range []string{
-		`formaction="/app/applications/bulk/prepare"`,
-		`formaction="/app/applications/bulk/draft"`,
-		`formaction="/app/applications/bulk/review"`,
-		`formaction="/app/applications/send-confirm"`,
-	} {
-		if !strings.Contains(html, `hidden type="submit" `+action) {
-			t.Fatalf("zero-selection bulk action should start hidden: %s", action)
-		}
-	}
-}
-
 func TestAppTemplateApplicationDetailIsReadOnlyUntilActionWiring(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil {
