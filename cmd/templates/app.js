@@ -61,24 +61,78 @@
     return sync;
   }
   var jobs = all('.js-job-check');
-  var syncJobs = selection(jobs, byId('select-all-jobs'), byId('selected-jobs-count'), function (selected) {
-    var n = selected.length, queue = byId('queue-selected-jobs'), process = byId('process-selected-jobs');
-    all('.js-triage-action').forEach(function (button) {
-      button.disabled = n === 0;
-      button.title = n === 0 ? 'Select at least one job' : 'Update the selected jobs locally';
+  var jobForm = byId('bulk-jobs-form');
+  var jobCount = byId('selected-jobs-count');
+  var jobSelectionTotal = jobCount ? parseInt(jobCount.dataset.selectedCount || '0', 10) || 0 : 0;
+
+  function jobSelectionPayload(action, ids, selected) {
+    var data = new URLSearchParams();
+    var csrf = document.querySelector('meta[name="csrf-token"]');
+    data.set('csrf', csrf ? csrf.content : '');
+    data.set('selection_action', action);
+    if (selected !== undefined) data.set('selected', selected ? '1' : '0');
+    (ids || []).forEach(function (id) { data.append('job_id', id); });
+    if (jobForm) all('input[type="hidden"][name^="filter_"]', jobForm).forEach(function (input) {
+      if (input.value) data.set(input.name, input.value);
     });
+    return data;
+  }
+
+  function persistJobSelection(action, ids, selected) {
+    if (!jobForm) return Promise.resolve(null);
+    return fetch('/app/jobs/selection', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+      body: jobSelectionPayload(action, ids, selected).toString()
+    }).then(function (r) {
+      return r.json().then(function (data) {
+        if (!r.ok || !data.ok) throw new Error(data.error || 'Selection update failed');
+        jobSelectionTotal = data.count || 0;
+        if (jobCount) {
+          jobCount.dataset.selectedCount = String(jobSelectionTotal);
+          jobCount.textContent = jobSelectionTotal + ' selected across pages';
+        }
+        syncJobs();
+        return data;
+      });
+    }).catch(function (err) {
+      var detail = byId('jobs-selection-detail');
+      if (detail) detail.textContent = 'Selection could not be saved: ' + err.message;
+      return null;
+    });
+  }
+
+  var syncJobs = selection(jobs, byId('select-all-jobs'), null, function (selected) {
+    var visibleN = selected.length, totalN = jobSelectionTotal;
+    var queue = byId('queue-selected-jobs'), process = byId('process-selected-jobs');
+    if (jobCount) jobCount.textContent = totalN + ' selected across pages';
+    all('.js-triage-action').forEach(function (button) {
+      button.disabled = totalN === 0;
+      button.title = totalN === 0 ? 'Select at least one job' : 'Update all selected jobs, including selections on other pages';
+    });
+    // Temporary compatibility actions remain page-local until Start Applications replaces them.
     if (queue) {
-      queue.disabled = n === 0 || n > 50;
-      queue.title = n > 50 ? 'Select at most 50 jobs' : 'Compatibility action for shortlisted jobs';
+      queue.disabled = visibleN === 0 || visibleN > 50;
+      queue.title = visibleN > 50 ? 'Select at most 50 visible jobs' : 'Temporary page-local compatibility action';
     }
     if (process) {
-      process.disabled = n === 0 || n > 25;
-      process.title = n > 25 ? 'Select at most 25 jobs' : 'Compatibility action for shortlisted jobs';
+      process.disabled = visibleN === 0 || visibleN > 25;
+      process.title = visibleN > 25 ? 'Select at most 25 visible jobs' : 'Temporary page-local compatibility action';
     }
     var email = selected.filter(function (x) { return x.dataset.method === 'EMAIL'; }).length;
     var easy = selected.filter(function (x) { return x.dataset.method === 'EASY_APPLY'; }).length;
     var detail = byId('jobs-selection-detail');
-    if (detail) detail.textContent = n ? n + ' selected · ' + email + ' email · ' + easy + ' Easy Apply · ' + (n - email - easy) + ' other. Choose Shortlist, Later, or Skip.' : 'Select jobs to update their decision.';
+    if (detail) detail.textContent = totalN ? totalN + ' selected across pages. On this page: ' + visibleN + ' selected · ' + email + ' email · ' + easy + ' Easy Apply · ' + (visibleN - email - easy) + ' other.' : 'Select jobs to update their decision.';
+  });
+
+  jobs.forEach(function (box) {
+    box.addEventListener('change', function () {
+      persistJobSelection('toggle', [box.value], box.checked);
+    });
+  });
+  var jobSelectAll = byId('select-all-jobs');
+  if (jobSelectAll) jobSelectAll.addEventListener('change', function () {
+    persistJobSelection('visible', jobs.map(function (x) { return x.value; }), jobSelectAll.checked);
   });
   var appForm = byId('bulk-app-form');
   var syncApps = selection(all('.js-app-check'), byId('select-all-apps'), byId('selected-count'), function (selected) {
