@@ -138,6 +138,11 @@ ON CONFLICT(job_id) DO UPDATE SET
 	if err != nil {
 		return nil, err
 	}
+	if j.ReviewState != models.JobReviewShortlisted {
+		if err := s.SetJobReviewState(jobID, models.JobReviewShortlisted, ""); err != nil {
+			return nil, err
+		}
+	}
 	return s.GetApplicationByJobID(jobID)
 }
 
