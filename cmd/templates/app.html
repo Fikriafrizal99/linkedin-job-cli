@@ -25,7 +25,7 @@
 </aside>
 <header class="topbar">
  <details class="mobile-menu"><summary aria-label="Open navigation">☰ <span>Menu</span></summary><nav aria-label="Mobile navigation"><a href="/app/dashboard">Dashboard</a><a href="/app/jobs">Jobs</a><a href="/app/applications">Applications</a><a href="/app/applications/review">Email review</a><a href="/app/applications/easy-apply">Easy Apply</a><a href="/app/cv-profiles">CV Profiles</a><a href="/app/collect">Collect Jobs</a><a href="/app/settings">Settings</a></nav></details>
-  <form action="/app/jobs" method="get" style="display:contents"><input class="global-search" name="q" value="{{.Query}}" placeholder="Search jobs, companies, or keywords…" aria-label="Global search"></form>
+  <form action="/app/jobs" method="get" style="display:contents"><input type="hidden" name="review" value="ALL"><input class="global-search" name="q" value="{{.Query}}" placeholder="Search jobs, companies, or keywords…" aria-label="Global search"></form>
   <div class="top-user"><div class="avatar">{{.CandidateInitials}}</div><div class="name">{{.CandidateName}}<small>Local Job Command Center</small></div></div>
 </header>
 <main class="main" id="main-content" tabindex="-1">
@@ -71,64 +71,92 @@
         <div class="content-card"><div class="content-pad">
           
           <div class="detail-grid">
-            <div class="info-card"><h3>Job Information</h3><div class="info-row"><span>Location</span><b>{{.SelectedJob.Location}}</b></div><div class="info-row"><span>Method</span><b>{{channelLabel .SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Contact</span><b>{{if .SelectedJob.ApplyEmail}}{{.SelectedJob.ApplyEmail}}{{else}}Not listed{{end}}</b></div><div class="info-row"><span>Posted</span><b>{{date .SelectedJob.PostedAt}}</b></div></div>
+            <div class="info-card"><h3>Job Information</h3><div class="info-row"><span>Decision</span><b><span class="badge review-{{lower .SelectedJob.ReviewState}}">{{reviewLabel .SelectedJob.ReviewState}}</span></b></div><div class="info-row"><span>Location</span><b>{{.SelectedJob.Location}}</b></div><div class="info-row"><span>Method</span><b>{{channelLabel .SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Contact</span><b>{{if .SelectedJob.ApplyEmail}}{{.SelectedJob.ApplyEmail}}{{else}}Not listed{{end}}</b></div><div class="info-row"><span>Posted</span><b>{{date .SelectedJob.PostedAt}}</b></div></div>
             <details class="info-card"><summary>Collection details</summary><div class="info-row"><span>LinkedIn ID</span><b>{{.SelectedJob.ID}}</b></div><div class="info-row"><span>Source</span><b>{{.SelectedJob.Source}}</b></div><div class="info-row"><span>Status</span><b>{{.SelectedJob.Status}}</b></div><div class="info-row"><span>Detail status</span><b>{{.SelectedJob.DetailStatus}}</b></div></details>
           </div>
           <div class="field-label">Description</div><div class="field email-body">{{if .SelectedJob.Description}}{{.SelectedJob.Description}}{{else if .SelectedJob.ShortDescription}}{{.SelectedJob.ShortDescription}}{{else}}No description was collected. Open the original LinkedIn posting for details.{{end}}</div>
         </div></div>
-        <aside class="content-card"><div class="content-pad"><h3>Application</h3><p class="muted">Explicit data extracted from the posting.</p><div class="info-row"><span>Method</span><b>{{channelLabel .SelectedJob.ApplicationMethod}}</b></div><div class="info-row"><span>Email</span><b>{{if .SelectedJob.ApplyEmail}}{{.SelectedJob.ApplyEmail}}{{else}}—{{end}}</b></div>
+        <aside class="content-card"><div class="content-pad">
+          <h3>Your decision</h3><p class="muted">Decide whether this job belongs in your active shortlist before application execution.</p>
+          <form class="triage-detail-actions" method="post" action="/app/jobs/{{.SelectedJob.ID}}/review-state">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <input type="hidden" name="return_url" value="{{.ListURL}}">
+            <button class="btn primary" type="submit" name="review_state" value="SHORTLISTED">Shortlist</button>
+            <button class="btn ghost" type="submit" name="review_state" value="LATER">Later</button>
+            <button class="btn ghost" type="submit" name="review_state" value="SKIPPED">Skip</button>
+          </form>
+          <div class="info-row"><span>Current decision</span><b><span class="badge review-{{lower .SelectedJob.ReviewState}}">{{reviewLabel .SelectedJob.ReviewState}}</span></b></div>
+          <div class="info-row"><span>Apply method</span><b>{{channelLabel .SelectedJob.ApplicationMethod}}</b></div>
+          <div class="info-row"><span>Email</span><b>{{if .SelectedJob.ApplyEmail}}{{.SelectedJob.ApplyEmail}}{{else}}—{{end}}</b></div>
         {{if .SelectedApplication}}
           <div class="info-row"><span>Pipeline State</span><span title="{{.SelectedApplication.State}}" class="badge state-{{lower .SelectedApplication.State}}">{{stateLabel .SelectedApplication.State}}</span></div>
           <a class="btn primary" style="display:block;text-align:center;margin-top:12px" href="/app/applications/{{.SelectedJob.ID}}">View Application</a>
-        {{else}}
+        {{else if eq .SelectedJob.ReviewState "SHORTLISTED"}}
+          <div class="footer-note">Compatibility path while Start Applications is implemented: shortlisted jobs can still enter the current queue.</div>
           <form method="post" action="/app/jobs/{{.SelectedJob.ID}}/queue" style="margin-top:12px" {{if and (not (and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail)) (not (easyApplyMethod .SelectedJob.ApplicationMethod))}}onsubmit="return confirm('This job has no supported email or Easy Apply path. Queue it as NEED_REVIEW anyway?')"{{end}}>
             <input type="hidden" name="csrf" value="{{.CSRF}}">
-            <button class="btn primary" type="submit" style="width:100%">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}Queue Email Application{{else if easyApplyMethod .SelectedJob.ApplicationMethod}}Queue Easy Apply{{else}}Queue for investigation{{end}}</button>
+            <button class="btn ghost" type="submit" style="width:100%">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}Queue Email Application{{else if easyApplyMethod .SelectedJob.ApplicationMethod}}Queue Easy Apply{{else}}Queue for investigation{{end}}</button>
           </form>
-          <div class="footer-note">{{if and (eq .SelectedJob.ApplicationMethod "EMAIL") .SelectedJob.ApplyEmail}}Next: prepare an email with your selected CV.{{else if easyApplyMethod .SelectedJob.ApplicationMethod}}Next: open the manual Easy Apply queue. You submit on LinkedIn.{{else}}No supported destination was found. Queueing adds this job to Needs attention for investigation.{{end}}</div>
+        {{else}}
+          <div class="next-step"><strong>Application execution is intentionally unavailable.</strong>Shortlist this job first if you want to pursue it.</div>
         {{end}}
         {{if .SelectedJob.ApplyURL}}<a class="btn ghost" style="display:block;text-align:center;margin-top:8px" target="_blank" rel="noreferrer" href="{{.SelectedJob.ApplyURL}}">Open Apply URL ↗</a>{{end}}</div></aside>
       </section>
     {{else}}
+      <nav class="triage-nav" aria-label="Job review views">
+        <a href="/app/jobs?review=UNREVIEWED" {{if eq .ReviewFilter "UNREVIEWED"}}aria-current="page"{{end}}>Inbox <span>{{.Stats.InboxTotal}}</span></a>
+        <a href="/app/jobs?review=SHORTLISTED" {{if eq .ReviewFilter "SHORTLISTED"}}aria-current="page"{{end}}>Shortlisted <span>{{.Stats.ShortlistedTotal}}</span></a>
+        <a href="/app/jobs?review=LATER" {{if eq .ReviewFilter "LATER"}}aria-current="page"{{end}}>Later <span>{{.Stats.LaterTotal}}</span></a>
+        <a href="/app/jobs?review=SKIPPED" {{if eq .ReviewFilter "SKIPPED"}}aria-current="page"{{end}}>Skipped <span>{{.Stats.SkippedTotal}}</span></a>
+        <a href="/app/jobs?review=ALL" {{if eq .ReviewFilter "ALL"}}aria-current="page"{{end}}>All Jobs <span>{{.Stats.JobsTotal}}</span></a>
+      </nav>
       <form class="toolbar" method="get" action="/app/jobs">
+        <input type="hidden" name="review" value="{{.ReviewFilter}}">
         <input class="control search" type="search" name="q" value="{{.Query}}" placeholder="Search jobs or companies…" aria-label="Search jobs">
         <label class="filter-field">Location<select class="control" name="location"><option value="">All locations</option>{{range .Locations}}<option value="{{.}}" {{if eq $.LocationFilter .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
         <label class="filter-field">Method<select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{channelLabel .}}</option>{{end}}</select></label>
         <label class="filter-field">Status<select class="control" name="state"><option value="">All states</option>{{range .States}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{stateLabel .}}</option>{{end}}</select></label>
-        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" href="/app/jobs">Reset</a>
+        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" href="/app/jobs?review={{.ReviewFilter}}">Reset</a>
       </form>
 
-      <div class="results-summary">{{.TotalRows}} jobs{{if .Filtered}} match your filters · <a class="job-link" href="/app/jobs">Clear all filters</a>{{else}} collected{{end}}<span>Select up to 50 to queue, or 25 to process.</span></div>
+      <div class="results-summary">{{.TotalRows}} {{reviewLabel .ReviewFilter}} job(s){{if .Filtered}} match your filters{{end}}<span>{{if eq .ReviewFilter "UNREVIEWED"}}Decide which jobs to pursue.{{else if eq .ReviewFilter "SHORTLISTED"}}Positive decisions ready for application handoff.{{else if eq .ReviewFilter "SKIPPED"}}Stored for history; excluded from active execution.{{else}}Triage decisions remain editable.{{end}}</span></div>
       <form method="post" id="bulk-jobs-form">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="filter_q" value="{{.Query}}">
         <input type="hidden" name="filter_location" value="{{.LocationFilter}}">
         <input type="hidden" name="filter_method" value="{{.MethodFilter}}">
-        <input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_page" value="{{.Page}}">
+        <input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_review" value="{{.ReviewFilter}}"><input type="hidden" name="filter_page" value="{{.Page}}">
         <div class="bulk-bar">
           <div class="bulk-primary-row">
             <div class="bulk-select">
               <label class="checkline"><input id="select-all-jobs" type="checkbox"> Select all visible</label>
               <span id="selected-jobs-count" class="batch-note" role="status">0 selected</span>
             </div>
-            <div class="bulk-actions">
-              <button class="btn ghost" id="queue-selected-jobs" type="submit" formaction="/app/jobs/bulk/queue">Queue Selected</button>
-              <button class="btn primary" id="process-selected-jobs" type="submit" formaction="/app/jobs/bulk/process-to-draft">Process Selected</button>
+            <div class="bulk-actions triage-actions">
+              <button class="btn primary js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="SHORTLISTED">Shortlist</button>
+              <button class="btn ghost js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="LATER">Later</button>
+              <button class="btn ghost js-triage-action" type="submit" formaction="/app/jobs/bulk/review-state" name="review_state" value="SKIPPED">Skip</button>
+              {{if eq .ReviewFilter "SHORTLISTED"}}
+                <button class="btn ghost compatibility-action" id="queue-selected-jobs" type="submit" formaction="/app/jobs/bulk/queue">Queue Selected</button>
+                <button class="btn ghost compatibility-action" id="process-selected-jobs" type="submit" formaction="/app/jobs/bulk/process-to-draft">Process Selected</button>
+              {{end}}
             </div>
           </div>
-          <div class="bulk-hint"><b>Queue Selected</b> saves jobs for later. <b>Process Selected</b> prepares email drafts for review and adds Easy Apply jobs to your manual queue. Neither action sends or submits applications.</div>
-          <div class="selection-detail" id="jobs-selection-detail" role="status">Select jobs to preview their application methods.</div>
-          <details class="bulk-options"><summary>Batch options{{if .Attachments}} · {{range .Attachments}}{{if and .Exists (eq .Kind "portfolio")}}{{.Label}} selected · {{end}}{{end}}attachments{{end}} &amp; unsupported jobs</summary>
+          <div class="bulk-hint">{{if eq .ReviewFilter "UNREVIEWED"}}Shortlist jobs you want to pursue, park uncertain jobs for Later, or Skip jobs you do not want.{{else}}You can change the triage decision at any time before protected application history exists.{{end}}</div>
+          <div class="selection-detail" id="jobs-selection-detail" role="status">Select jobs to update their decision.</div>
+          {{if eq .ReviewFilter "SHORTLISTED"}}
+          <details class="bulk-options"><summary>Temporary application compatibility actions &amp; attachments</summary>
+          <div class="bulk-hint">Until Start Applications is implemented, Queue/Process remain available only for shortlisted jobs.</div>
           <label class="checkline" style="margin:0"><input type="checkbox" name="include_need_review" value="1"> Include unsupported jobs as Needs attention (Queue Selected only)</label>
-          <div class="bulk-hint">Unsupported jobs are skipped by default. Include them only if you want to investigate their application destination.</div>
           {{if not .GmailConnected}}<div class="bulk-hint">Gmail is disconnected. <a class="job-link" href="/app/settings?tab=email">Connect Gmail</a> to create email drafts; Easy Apply is available now.</div>{{end}}
           {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for created drafts:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
           </details>
+          {{end}}
         </div>
 
-        <div class="content-card"><div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table class="jobs-table"><thead><tr><th style="width:42px"><span class="sr-only">Select</span></th><th>Job</th><th>Company</th><th>Location</th><th>Apply</th><th>Status</th><th>Added</th></tr></thead><tbody>
-        {{range .Jobs}}<tr class="js-selectable-row"><td><input aria-label="Select {{.Title}} at {{.Company}}" data-method="{{.Method}}" data-state="{{.State}}" class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"></td><td class="table-title"><a class="job-link" href="{{detailURL "/app/jobs/" .ID $.ListURL}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted table-location">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{channelLabel .Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else if eq .Method "EASY_APPLY"}}<small>LinkedIn form · manual submission</small>{{else}}<small>Unsupported destination · skipped by default</small>{{end}}</td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
-        </tbody></table></div>{{if not .Jobs}}<div class="empty">{{if .Filtered}}No jobs match these filters. <a class="job-link" href="/app/jobs">Clear filters</a>{{else}}No jobs collected yet. <a class="job-link" href="/app/collect">Collect your first jobs →</a>{{end}}</div>{{end}}</div>
+        <div class="content-card"><div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table class="jobs-table"><thead><tr><th style="width:42px"><span class="sr-only">Select</span></th><th>Job</th><th>Company</th><th>Location</th><th>Apply</th><th>Decision</th><th>Application</th><th>Added</th></tr></thead><tbody>
+        {{range .Jobs}}<tr class="js-selectable-row"><td><input aria-label="Select {{.Title}} at {{.Company}}" data-method="{{.Method}}" data-state="{{.State}}" class="row-check js-job-check" type="checkbox" name="job_id" value="{{.ID}}"></td><td class="table-title"><a class="job-link" href="{{detailURL "/app/jobs/" .ID $.ListURL}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td class="muted table-location">{{.Location}}</td><td class="apply-cell"><span class="badge method-{{lower .Method}}">{{channelLabel .Method}}</span>{{if .Email}}<small>{{.Email}}</small>{{else if eq .Method "EASY_APPLY"}}<small>LinkedIn form · manual submission</small>{{else}}<small>Unsupported destination · skipped by default</small>{{end}}</td><td><span class="badge review-{{lower .ReviewState}}">{{reviewLabel .ReviewState}}</span></td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td><td class="muted">{{.Added}}</td></tr>{{end}}
+        </tbody></table></div>{{if not .Jobs}}<div class="empty">{{if .Filtered}}No jobs match these filters.{{else if eq .ReviewFilter "UNREVIEWED"}}Inbox clear. No unreviewed jobs need a decision.{{else if eq .ReviewFilter "SHORTLISTED"}}No shortlisted jobs yet. Review the Inbox and shortlist jobs you want to pursue.{{else if eq .ReviewFilter "LATER"}}No jobs saved for later.{{else if eq .ReviewFilter "SKIPPED"}}No skipped jobs.{{else}}No jobs collected yet. <a class="job-link" href="/app/collect">Collect your first jobs →</a>{{end}}</div>{{end}}</div>
       </form>
 <nav class="pagination" aria-label="Results pages"><span>Showing {{.FirstRow}}–{{.LastRow}} of {{.TotalRows}} · 50 per page</span>{{if .PrevPageURL}}<a class="btn ghost" href="{{.PrevPageURL}}">← Previous page</a>{{end}}{{if .NextPageURL}}<a class="btn ghost" href="{{.NextPageURL}}">Next page →</a>{{end}}</nav>
     {{end}}
