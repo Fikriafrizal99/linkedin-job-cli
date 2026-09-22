@@ -363,6 +363,7 @@ func redirectJobBulkResult(w http.ResponseWriter, r *http.Request, action string
 		"filter_method":   "method",
 		"filter_state":    "state",
 		"filter_since":    "since",
+		"filter_review":   "review",
 		"filter_page":     "page",
 	} {
 		if v := strings.TrimSpace(r.PostFormValue(formKey)); v != "" {
