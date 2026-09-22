@@ -100,3 +100,56 @@ func TestJobTriageDetailRequiresShortlistForExecution(t *testing.T) {
 		t.Fatal("detail should explain the shortlist gate")
 	}
 }
+
+func TestSkipReasonPersistsAndAggregates(t *testing.T) {
+	t.Setenv("LJ_SETTINGS_FILE", filepath.Join(t.TempDir(), "settings.yaml"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "skip-reasons.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for _, id := range []string{"r1", "r2", "r3"} {
+		if err := st.Upsert(&models.JobPosting{ID: id, Title: id, URL: "https://example.com/" + id, SearchedAt: "2026-09-22T00:00:00Z"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := &webServer{st: st, csrf: "token"}
+
+	for _, tc := range []struct{ id, reason string }{
+		{"r1", models.JobReviewReasonRoleMismatch},
+		{"r2", models.JobReviewReasonRoleMismatch},
+		{"r3", models.JobReviewReasonLocation},
+	} {
+		form := url.Values{"csrf": {"token"}, "review_state": {models.JobReviewSkipped}, "review_reason": {tc.reason}, "return_url": {"/app/jobs"}}
+		req := httptest.NewRequest(http.MethodPost, "/app/jobs/"+tc.id+"/review-state", strings.NewReader(form.Encode()))
+		req.SetPathValue("id", tc.id)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		ws.handleAppSetJobReviewState(rec, req)
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("%s status=%d", tc.id, rec.Code)
+		}
+	}
+
+	reasons, err := st.TopJobReviewReasons(models.JobReviewSkipped, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reasons) != 2 || reasons[0].Reason != models.JobReviewReasonRoleMismatch || reasons[0].Count != 2 {
+		t.Fatalf("unexpected reason aggregation: %+v", reasons)
+	}
+
+	job, _ := st.Get("r1")
+	if job.ReviewReason != models.JobReviewReasonRoleMismatch {
+		t.Fatalf("review reason=%q", job.ReviewReason)
+	}
+
+	// Reasons are skip-specific and are cleared when the decision changes.
+	if err := st.SetJobReviewState("r1", models.JobReviewUnreviewed, models.JobReviewReasonRoleMismatch); err != nil {
+		t.Fatal(err)
+	}
+	job, _ = st.Get("r1")
+	if job.ReviewReason != "" {
+		t.Fatalf("non-skipped job retained skip reason %q", job.ReviewReason)
+	}
+}
