@@ -110,7 +110,7 @@ func TestApplicationsListRendersContextualNextSteps(t *testing.T) {
 		`formaction="/app/applications/bulk/review"`,
 		`formaction="/app/applications/send-confirm"`,
 	} {
-		if !strings.Contains(html, "hidden type="submit" "+action) {
+		if !strings.Contains(html, `hidden type="submit" `+action) {
 			t.Fatalf("zero-selection bulk action should start hidden: %s", action)
 		}
 	}
