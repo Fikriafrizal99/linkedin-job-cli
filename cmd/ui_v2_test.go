@@ -389,8 +389,8 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 	}
 	if !strings.Contains(fresh.String(), `action="/app/jobs/12345/queue"`) ||
 		!strings.Contains(fresh.String(), "Queue Email Application") ||
-		!strings.Contains(fresh.String(), "READY_EMAIL") {
-		t.Fatalf("fresh job detail missing queue UI: %s", fresh.String())
+		!strings.Contains(fresh.String(), "Shortlisted") {
+		t.Fatalf("shortlisted job detail missing compatibility queue UI: %s", fresh.String())
 	}
 
 	var queued bytes.Buffer
