@@ -111,7 +111,15 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 		SelectedApplication: &models.JobApplication{
 			JobID: "easy-ui", State: models.ApplicationStateReadyEasyApply, ApplyURL: "https://www.linkedin.com/jobs/view/999999/",
 		},
-		SelectedApplicationJob: &models.JobPosting{ID: "easy-ui", Title: "Account Executive", Company: "Example", ApplicationMethod: "LINKEDIN"},
+		SelectedApplicationJob: &models.JobPosting{
+			ID: "easy-ui", Title: "Account Executive", Company: "Example", ApplicationMethod: "LINKEDIN",
+			Location: "Jakarta", PostedAt: "2026-09-20", RemoteType: "Hybrid",
+			EmploymentType: "Full-time", Seniority: "Mid-Senior level", SalaryRaw: "IDR 12,000,000 - 18,000,000",
+			ShortDescription: "Own the sales pipeline and grow key accounts.",
+			Description: "Lead prospecting, pipeline reviews, account growth, and cross-functional coordination.",
+			ApplicationInstruction: "Complete the LinkedIn Easy Apply form and attach an updated CV.",
+			CompanyOverview: "Example builds business software for growing teams.",
+		},
 		CVProfiles: []appCVProfile{{ID: "sales", Default: true, Exists: true}},
 		EasyApplyOpenTargets: []easyApplyOpenTarget{{
 			JobID: "easy-ui", URL: "https://www.linkedin.com/jobs/view/999999/", MarkURL: "/app/applications/easy-ui/easy-apply/open",
@@ -127,6 +135,15 @@ func TestEasyApplyQueueRendersManualControls(t *testing.T) {
 		"name=\"apply_confirm\" value=\"1\" required",
 		"target=\"_blank\"",
 		"Submission remains human-controlled",
+		"Job Context",
+		"Jakarta",
+		"Mid-Senior level",
+		"Own the sales pipeline and grow key accounts.",
+		"Application instructions",
+		"Complete the LinkedIn Easy Apply form and attach an updated CV.",
+		"Job description",
+		"Lead prospecting, pipeline reviews, account growth, and cross-functional coordination.",
+		"Company overview",
 		"data-mark=\"/app/applications/easy-ui/easy-apply/open\"",
 	} {
 		if !strings.Contains(html, want) { t.Errorf("Easy Apply UI missing %q", want) }

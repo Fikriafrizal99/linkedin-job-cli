@@ -222,6 +222,31 @@
             </div>
           </div>
 
+          {{if .SelectedApplicationJob}}
+          <section class="info-card" style="margin-top:14px">
+            <div class="detail-title"><div><h3>Job Context</h3><p class="muted">Review the posting details before completing the LinkedIn form.</p></div><a class="job-link" href="/app/jobs/{{.SelectedApplication.JobID}}">Full job detail →</a></div>
+            <div class="detail-grid" style="margin-top:10px">
+              <div>
+                <div class="info-row"><span>Location</span><b>{{if .SelectedApplicationJob.Location}}{{.SelectedApplicationJob.Location}}{{else}}Not listed{{end}}</b></div>
+                <div class="info-row"><span>Posted</span><b>{{date .SelectedApplicationJob.PostedAt}}</b></div>
+                <div class="info-row"><span>Work arrangement</span><b>{{if .SelectedApplicationJob.RemoteType}}{{.SelectedApplicationJob.RemoteType}}{{else}}Not listed{{end}}</b></div>
+              </div>
+              <div>
+                <div class="info-row"><span>Employment type</span><b>{{if .SelectedApplicationJob.EmploymentType}}{{.SelectedApplicationJob.EmploymentType}}{{else}}Not listed{{end}}</b></div>
+                <div class="info-row"><span>Seniority</span><b>{{if .SelectedApplicationJob.Seniority}}{{.SelectedApplicationJob.Seniority}}{{else}}Not listed{{end}}</b></div>
+                <div class="info-row"><span>Salary</span><b>{{if .SelectedApplicationJob.SalaryRaw}}{{.SelectedApplicationJob.SalaryRaw}}{{else}}Not listed{{end}}</b></div>
+              </div>
+            </div>
+            {{if .SelectedApplicationJob.ShortDescription}}<div class="field-label">Quick summary</div><div class="field">{{.SelectedApplicationJob.ShortDescription}}</div>{{end}}
+            {{if .SelectedApplicationJob.ApplicationInstruction}}<div class="field-label">Application instructions</div><div class="field">{{.SelectedApplicationJob.ApplicationInstruction}}</div>{{end}}
+            <details class="file-details" open>
+              <summary>Job description</summary>
+              <div class="field email-body" style="margin-top:10px;max-height:380px;overflow:auto">{{if .SelectedApplicationJob.Description}}{{.SelectedApplicationJob.Description}}{{else if .SelectedApplicationJob.ShortDescription}}{{.SelectedApplicationJob.ShortDescription}}{{else if .SelectedApplicationJob.Summary}}{{.SelectedApplicationJob.Summary}}{{else}}No description was collected. Open the original LinkedIn posting for full details.{{end}}</div>
+            </details>
+            {{if .SelectedApplicationJob.CompanyOverview}}<details class="file-details"><summary>Company overview</summary><div class="field" style="margin-top:10px">{{.SelectedApplicationJob.CompanyOverview}}</div></details>{{end}}
+          </section>
+          {{end}}
+
           {{range .EasyApplyOpenTargets}}<div class="easy-open-target" data-url="{{.URL}}" data-mark="{{.MarkURL}}" data-job="{{.JobID}}"></div>{{end}}
 
           <form id="easy-confirm-form" class="confirmation-block" data-opened="{{eq .SelectedApplication.State "IN_PROGRESS"}}" method="post" action="/app/applications/{{.SelectedApplication.JobID}}/easy-apply/applied"><h3>After you submit on LinkedIn</h3><p class="form-help" id="easy-confirm-help">{{if eq .SelectedApplication.State "IN_PROGRESS"}}Confirm only when LinkedIn shows your submission is complete.{{else}}Open LinkedIn first. Return here after manually submitting the application.{{end}}</p>
