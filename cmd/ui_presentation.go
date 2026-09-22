@@ -73,7 +73,11 @@ const appPageSize = 50
 
 func appListURL(path string, q url.Values, page int) string {
 	out := url.Values{}
-	for _, key := range []string{"q", "location", "method", "state", "since", "review"} {
+	keys := []string{"q", "location", "method", "state", "since"}
+	if strings.HasPrefix(path, "/app/jobs") {
+		keys = append(keys, "review")
+	}
+	for _, key := range keys {
 		if v := strings.TrimSpace(q.Get(key)); v != "" {
 			out.Set(key, v)
 		}
