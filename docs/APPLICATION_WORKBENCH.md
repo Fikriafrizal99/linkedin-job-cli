@@ -43,11 +43,9 @@ APPLIED
 Opening the LinkedIn page never marks an application as APPLIED. APPLIED requires an explicit local confirmation after the user submits the form manually.
 
 
-## Approved intake redesign: Triage before Applications
+## Approved intake flow: Triage before Applications
 
-The current implementation still allows direct bulk intake from the Jobs table. That behavior is a compatibility path while the approved triage milestone is implemented.
-
-The target flow is defined in [JOB_TRIAGE_WORKFLOW.md](JOB_TRIAGE_WORKFLOW.md):
+The triage-first intake is now implemented.
 
 ~~~text
 Collect
@@ -70,13 +68,13 @@ Key rules:
 - only SHORTLISTED jobs enter the normal application handoff;
 - Jobs is the decision workspace;
 - Applications is the execution workspace;
-- pagination must not limit selection scope;
-- Gmail/provider limits remain separate from local triage limits.
+- cross-page selection is independent from the 50-row display page;
+- Start Applications creates local application records only;
+- Gmail drafting/sending and manual LinkedIn execution remain downstream actions with their own limits.
 
-Until the migration is complete, the direct Jobs Queue Selected / Process Selected routes documented below describe the **current compatibility behavior**, not the final intake UX.
+The older direct Jobs Queue Selected / Process Selected handlers remain internal compatibility code for now, but the current Jobs UI no longer presents them as the normal workflow.
 
-
-## Current compatibility path: Database Jobs → Review Queue
+## Legacy compatibility routes: direct database intake
 
 The Jobs database is now the intake surface for high-volume application processing. You no longer need to open and queue each collected job individually.
 
