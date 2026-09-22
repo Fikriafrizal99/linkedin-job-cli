@@ -77,6 +77,8 @@ Binds to localhost only by default.`,
 		mux.HandleFunc("GET /app/", ws.handleAppUI)
 		mux.HandleFunc("POST /app/collect/run", ws.handleAppCollectRun)
 		mux.HandleFunc("POST /app/jobs/selection", ws.handleAppJobSelection)
+		mux.HandleFunc("POST /app/jobs/{id}/start-application", ws.handleAppStartApplication)
+		mux.HandleFunc("POST /app/jobs/bulk/start-applications", ws.handleAppStartApplications)
 		mux.HandleFunc("POST /app/jobs/{id}/review-state", ws.handleAppSetJobReviewState)
 		mux.HandleFunc("POST /app/jobs/bulk/review-state", ws.handleAppBulkReviewState)
 		mux.HandleFunc("POST /app/jobs/bulk/queue", ws.handleAppBulkQueueJobs)
