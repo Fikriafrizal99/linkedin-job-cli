@@ -378,6 +378,7 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 		Company: "Example Co",
 		ApplicationMethod: "EMAIL",
 		ApplyEmail: "jobs@example.com",
+		ReviewState: models.JobReviewShortlisted,
 	}
 
 	var fresh bytes.Buffer
@@ -404,8 +405,8 @@ func TestJobDetailRendersQueueOrExistingApplication(t *testing.T) {
 		t.Fatalf("execute queued detail: %v", err)
 	}
 	if !strings.Contains(queued.String(), "View Application") ||
-		strings.Contains(queued.String(), "Start Application") {
-		t.Fatalf("queued job detail should show view action only")
+		strings.Contains(queued.String(), `action="/app/jobs/12345/start-application"`) {
+		t.Fatalf("queued job detail should show View Application and no start-application action")
 	}
 }
 
