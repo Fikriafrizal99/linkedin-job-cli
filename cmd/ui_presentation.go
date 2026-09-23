@@ -77,6 +77,9 @@ func appListURL(path string, q url.Values, page int) string {
 	if strings.HasPrefix(path, "/app/jobs") {
 		keys = append(keys, "review", "run")
 	}
+	if strings.HasPrefix(path, "/app/applications") {
+		keys = append(keys, "scope")
+	}
 	for _, key := range keys {
 		if v := strings.TrimSpace(q.Get(key)); v != "" {
 			out.Set(key, v)
