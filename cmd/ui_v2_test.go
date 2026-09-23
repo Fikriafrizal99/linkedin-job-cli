@@ -735,7 +735,7 @@ func TestApplicationDetailRendersPrepareFormForReadyEmail(t *testing.T) {
 		`name="csrf" value="csrf-prepare"`,
 		`name="cv_profile"`,
 		"Auto · match by keywords",
-		"Prepare Application",
+		"Generate Default Email",
 		"does not create a Gmail draft",
 	} {
 		if !strings.Contains(out, want) {
