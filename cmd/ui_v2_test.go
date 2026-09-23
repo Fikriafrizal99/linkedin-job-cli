@@ -222,6 +222,95 @@ func TestAppTemplateApplicationDetailIsReadOnlyUntilActionWiring(t *testing.T) {
 }
 
 
+func TestSaveApplicationEmailContentBeforeDraft(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "editable-email.db"))
+	if err != nil { t.Fatal(err) }
+	defer st.Close()
+
+	job := &models.JobPosting{
+		ID: "email-edit-1", Title: "Sales Executive", Company: "Example",
+		URL: "https://www.linkedin.com/jobs/view/123001", ApplicationMethod: "EMAIL",
+		ApplyEmail: "jobs@example.com", ReviewState: models.JobReviewShortlisted,
+	}
+	if err := st.Upsert(job); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(job.ID); err != nil { t.Fatal(err) }
+	if _, err := st.SaveApplicationPreparation(job.ID, "Old subject", "Old body", "general"); err != nil { t.Fatal(err) }
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	form := url.Values{
+		"csrf": {"csrf-test"},
+		"subject": {"Application - Sales Executive - Custom"},
+		"body": {"Dear Hiring Team,\n\nThis is my edited application email."},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/app/applications/"+job.ID+"/content", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", job.ID)
+	rec := httptest.NewRecorder()
+	ws.handleAppSaveApplicationContent(rec, req)
+	if rec.Code != http.StatusSeeOther { t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String()) }
+	if !strings.Contains(rec.Header().Get("Location"), "content_saved=1") { t.Fatalf("redirect=%q", rec.Header().Get("Location")) }
+	app, err := st.GetApplicationByJobID(job.ID)
+	if err != nil { t.Fatal(err) }
+	if app.Subject != "Application - Sales Executive - Custom" || !strings.Contains(app.Body, "edited application email") || app.CVProfile != "general" {
+		t.Fatalf("saved application=%+v", app)
+	}
+}
+
+func TestSaveApplicationEmailContentLockedAfterDraft(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "locked-email.db"))
+	if err != nil { t.Fatal(err) }
+	defer st.Close()
+	job := &models.JobPosting{
+		ID: "email-edit-locked", Title: "Sales Executive", Company: "Example",
+		URL: "https://www.linkedin.com/jobs/view/123002", ApplicationMethod: "EMAIL",
+		ApplyEmail: "jobs@example.com", ReviewState: models.JobReviewShortlisted,
+	}
+	if err := st.Upsert(job); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(job.ID); err != nil { t.Fatal(err) }
+	if _, err := st.SaveApplicationPreparation(job.ID, "Original subject", "Original body", "general"); err != nil { t.Fatal(err) }
+	if _, err := st.MarkApplicationDraftCreated(job.ID, "draft-locked"); err != nil { t.Fatal(err) }
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	form := url.Values{"csrf": {"csrf-test"}, "subject": {"Changed subject"}, "body": {"Changed body"}}
+	req := httptest.NewRequest(http.MethodPost, "/app/applications/"+job.ID+"/content", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", job.ID)
+	rec := httptest.NewRecorder()
+	ws.handleAppSaveApplicationContent(rec, req)
+	if rec.Code != http.StatusSeeOther || !strings.Contains(rec.Header().Get("Location"), "action_error=") {
+		t.Fatalf("locked edit redirect=%q status=%d", rec.Header().Get("Location"), rec.Code)
+	}
+	app, _ := st.GetApplicationByJobID(job.ID)
+	if app.Subject != "Original subject" || app.Body != "Original body" { t.Fatalf("locked content changed: %+v", app) }
+}
+
+func TestReadyEmailDetailRendersEditableEmailComposer(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil { t.Fatal(err) }
+	app := &models.JobApplication{
+		JobID: "editable-ui", State: models.ApplicationStateReadyEmail, Recipient: "jobs@example.com",
+		Subject: "Application - Sales Executive", Body: "Dear Hiring Team,\n\nEditable body.", CVProfile: "general",
+	}
+	var out bytes.Buffer
+	if err := tpl.Execute(&out, appPageData{
+		Title: "Application Detail", Active: "applications", CSRF: "csrf",
+		CandidateName: "Candidate", CandidateInitials: "C", SelectedApplication: app,
+		SelectedApplicationJob: &models.JobPosting{ID: app.JobID, Title: "Sales Executive", Company: "Example"},
+		CVProfiles: []appCVProfile{{ID: "general", Default: true, Exists: true}},
+	}); err != nil { t.Fatal(err) }
+	html := out.String()
+	for _, want := range []string{
+		"action=\"/app/applications/editable-ui/content\"",
+		"name=\"subject\"",
+		"name=\"body\"",
+		"Save Changes",
+		"Regenerate Default",
+		"overwrite your saved subject and body",
+	} {
+		if !strings.Contains(html, want) { t.Errorf("editable email UI missing %q", want) }
+	}
+}
+
 func TestMatchesUIJobFilters(t *testing.T) {
 	j := &models.JobPosting{
 		Title: "Sales Executive",
