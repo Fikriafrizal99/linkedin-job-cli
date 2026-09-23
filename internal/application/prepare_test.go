@@ -78,3 +78,13 @@ func TestPrepareApplication(t *testing.T) {
 		t.Fatalf("body=%q", got.Body)
 	}
 }
+
+func TestPrepareApplicationUsesRoleRelevantExperience(t *testing.T) {
+	settings := config.ApplicationSettings{CandidateName: "Mochamad Fikri Afrizal"}
+	job := &models.JobPosting{Title: "Business Development Executive", Company: "Example Company", Description: "Own sales pipeline, client relationships, and commercial growth."}
+	got, err := Prepare(job, settings, "")
+	if err != nil { t.Fatalf("Prepare: %v", err) }
+	for _, want := range []string{"more than three years of experience across consumer finance", "sales execution", "pipeline", "Example Company", "Mochamad Fikri Afrizal"} {
+		if !strings.Contains(got.Body, want) { t.Fatalf("generated body missing %q: %s", want, got.Body) }
+	}
+}
