@@ -144,6 +144,32 @@ func (ws *webServer) handleGmailDisconnect(w http.ResponseWriter, r *http.Reques
 	redirectGmailSettings(w, r, nil, "disconnected")
 }
 
+func (ws *webServer) handleAppMarkSentManual(w http.ResponseWriter, r *http.Request) {
+	if !ws.checkCSRF(w, r) {
+		return
+	}
+	jobID := strings.TrimSpace(r.PathValue("id"))
+	if jobID == "" {
+		http.Error(w, "missing job id", http.StatusBadRequest)
+		return
+	}
+	if r.PostFormValue("manual_sent_confirm") != "1" {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("confirm that you already sent this email manually"))
+		return
+	}
+
+	ws.lifecycleMu.Lock()
+	_, err := ws.st.MarkApplicationSentManual(jobID)
+	ws.lifecycleMu.Unlock()
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+
+	q := url.Values{"scope": {"completed"}, "manual_sent": {"1"}}
+	http.Redirect(w, r, "/app/applications?"+q.Encode(), http.StatusSeeOther)
+}
+
 func (ws *webServer) handleAppCreateGmailDraft(w http.ResponseWriter, r *http.Request) {
 	if !ws.checkCSRF(w, r) {
 		return
