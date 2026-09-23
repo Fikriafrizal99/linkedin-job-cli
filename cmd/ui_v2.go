@@ -427,6 +427,56 @@ func (ws *webServer) handleAppPrepareApplication(w http.ResponseWriter, r *http.
 	http.Redirect(w, r, "/app/applications/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
 }
 
+func (ws *webServer) handleAppSaveApplicationContent(w http.ResponseWriter, r *http.Request) {
+	if !ws.checkCSRF(w, r) {
+		return
+	}
+	jobID := strings.TrimSpace(r.PathValue("id"))
+	if jobID == "" {
+		http.Error(w, "missing job id", http.StatusBadRequest)
+		return
+	}
+
+	subject := strings.TrimSpace(r.PostFormValue("subject"))
+	body := strings.TrimSpace(r.PostFormValue("body"))
+	if subject == "" {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("email subject cannot be empty"))
+		return
+	}
+	if body == "" {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("email body cannot be empty"))
+		return
+	}
+	if len(subject) > 240 {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("email subject must be 240 characters or fewer"))
+		return
+	}
+	if len(body) > 12000 {
+		redirectApplicationAction(w, r, jobID, fmt.Errorf("email body must be 12000 characters or fewer"))
+		return
+	}
+
+	ws.lifecycleMu.Lock()
+	a, err := ws.st.GetApplicationByJobID(jobID)
+	if err == nil && a == nil {
+		err = fmt.Errorf("application is not queued")
+	}
+	if err == nil && a.State != models.ApplicationStateReadyEmail {
+		err = fmt.Errorf("application state is %s; email content can only be edited before a Gmail draft is created", a.State)
+	}
+	if err == nil {
+		_, err = ws.st.SaveApplicationPreparation(jobID, subject, body, a.CVProfile)
+	}
+	ws.lifecycleMu.Unlock()
+	if err != nil {
+		redirectApplicationAction(w, r, jobID, err)
+		return
+	}
+
+	q := url.Values{"content_saved": {"1"}}
+	http.Redirect(w, r, "/app/applications/"+url.PathEscape(jobID)+"?"+q.Encode(), http.StatusSeeOther)
+}
+
 func prepareApplicationForUI(st *store.Store, jobID string, settings config.ApplicationSettings, override string) (*models.JobApplication, error) {
 	if st == nil {
 		return nil, fmt.Errorf("store is required")
@@ -650,10 +700,13 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	}
 	if r.URL.Query().Get("prepared") == "1" {
 		profile := strings.TrimSpace(r.URL.Query().Get("cv_profile"))
-		pd.ActionMessage = "Application prepared successfully."
+		pd.ActionMessage = "Default email content generated successfully. Review or edit it before creating the Gmail draft."
 		if profile != "" {
 			pd.ActionMessage += " CV profile: " + profile + "."
 		}
+	}
+	if r.URL.Query().Get("content_saved") == "1" {
+		pd.ActionMessage = "Email subject and body saved. The saved version will be used when you create the Gmail draft."
 	}
 	if r.URL.Query().Get("draft_created") == "1" {
 		pd.ActionMessage = "Gmail draft created successfully."
