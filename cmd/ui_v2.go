@@ -708,6 +708,9 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	if r.URL.Query().Get("content_saved") == "1" {
 		pd.ActionMessage = "Email subject and body saved. The saved version will be used when you create the Gmail draft."
 	}
+	if r.URL.Query().Get("manual_sent") == "1" {
+		pd.ActionMessage = "Application marked SENT manually and moved to Completed. No email was sent by this app."
+	}
 	if r.URL.Query().Get("draft_created") == "1" {
 		pd.ActionMessage = "Gmail draft created successfully."
 		if draftID := strings.TrimSpace(r.URL.Query().Get("draft_id")); draftID != "" {
