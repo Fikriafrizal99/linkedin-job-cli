@@ -373,6 +373,15 @@
           {{else}}
             <div class="footer-note">Prepare the application first. This only stores subject/body + CV profile; it does not create a Gmail draft or send email.</div>
           {{end}}
+<details class="file-details manual-sent-action" style="margin-top:14px">
+  <summary class="job-link" style="cursor:pointer">Already sent this email manually?</summary>
+  <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/mark-sent-manual" style="margin-top:12px" onsubmit="return confirm('Mark this application as SENT? This only updates local tracking and will move it to Completed.')">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label class="checkline"><input type="checkbox" name="manual_sent_confirm" value="1" required> I confirm I already sent this application email outside this app.</label>
+    <div class="detail-actions"><button class="btn ghost" type="submit">Mark Sent Manually</button></div>
+  </form>
+  <div class="footer-note">This does not send another email. It only records SENT locally and moves the application to Completed.</div>
+</details>
 <details class="file-details"><summary>Remove this application from the queue</summary>          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/remove" style="margin-top:12px" onsubmit="return confirm('Remove this application from the queue? The collected job will remain in Jobs.')">
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <button class="btn danger" type="submit">Remove from Queue</button>
@@ -405,6 +414,16 @@
             <div class="detail-actions"><button class="btn primary" type="submit">Approve Application</button></div>
           </form>
           <div class="footer-note">Approval only changes the local lifecycle to APPROVED. It does not send the email.</div>
+          <details class="file-details manual-sent-action" style="margin-top:14px">
+  <summary class="job-link" style="cursor:pointer">Already sent this email manually?</summary>
+  <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/mark-sent-manual" style="margin-top:12px" onsubmit="return confirm('Mark this application as SENT? This only updates local tracking and will move it to Completed.')">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label class="checkline"><input type="checkbox" name="manual_sent_confirm" value="1" required> I confirm I already sent this application email outside this app.</label>
+    <div class="detail-actions"><button class="btn ghost" type="submit">Mark Sent Manually</button></div>
+  </form>
+  <div class="footer-note">This does not send another email. It only records SENT locally and moves the application to Completed.</div>
+</details>
+
         {{else if eq .SelectedApplication.State "APPROVED"}}
           <div class="alert success" style="margin-top:16px">Application is approved for a separate explicit send action. No email has been sent by approval.</div>
           <div class="detail-grid" style="margin-top:14px">
@@ -430,8 +449,19 @@
             <div class="detail-actions"><button class="btn ghost" type="submit">Unapprove &amp; Reopen Review</button></div>
           </form>
           <div class="footer-note">Unapprove keeps the existing Gmail draft and returns the local state to DRAFT_CREATED.</div>
+          <details class="file-details manual-sent-action" style="margin-top:14px">
+  <summary class="job-link" style="cursor:pointer">Already sent this email manually?</summary>
+  <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/mark-sent-manual" style="margin-top:12px" onsubmit="return confirm('Mark this application as SENT? This only updates local tracking and will move it to Completed.')">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label class="checkline"><input type="checkbox" name="manual_sent_confirm" value="1" required> I confirm I already sent this application email outside this app.</label>
+    <div class="detail-actions"><button class="btn ghost" type="submit">Mark Sent Manually</button></div>
+  </form>
+  <div class="footer-note">This does not send another email. It only records SENT locally and moves the application to Completed.</div>
+</details>
+
         {{else if eq .SelectedApplication.State "SENT"}}
-          <div class="alert success" style="margin-top:16px">Application is recorded as SENT.</div>
+          <div class="alert success" style="margin-top:16px">{{if .SelectedApplication.GmailMessageID}}Application is recorded as SENT through the Gmail send flow.{{else}}Application is recorded as SENT manually.{{end}}</div>
+          <div class="info-card" style="margin-top:14px"><div class="info-row"><span>Sent at</span><b>{{.SelectedApplication.SentAt}}</b></div><div class="info-row"><span>Tracking source</span><b>{{if .SelectedApplication.GmailMessageID}}Gmail provider{{else}}Manual confirmation{{end}}</b></div></div>
           <div class="detail-actions"><button class="btn" disabled>Edit (Locked)</button></div>
           <div class="footer-note">Sent applications are locked from preparation and review state changes.</div>
         {{else}}
