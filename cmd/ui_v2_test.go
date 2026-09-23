@@ -311,6 +311,59 @@ func TestReadyEmailDetailRendersEditableEmailComposer(t *testing.T) {
 	}
 }
 
+func TestMarkEmailSentManuallyMovesToCompleted(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "manual-sent.db"))
+	if err != nil { t.Fatal(err) }
+	defer st.Close()
+	job := &models.JobPosting{
+		ID: "manual-sent-1", Title: "Account Executive", Company: "Example",
+		URL: "https://www.linkedin.com/jobs/view/990001", ApplicationMethod: "EMAIL",
+		ApplyEmail: "jobs@example.com", ReviewState: models.JobReviewShortlisted,
+	}
+	if err := st.Upsert(job); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(job.ID); err != nil { t.Fatal(err) }
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	form := url.Values{"csrf": {"csrf-test"}, "manual_sent_confirm": {"1"}}
+	req := httptest.NewRequest(http.MethodPost, "/app/applications/"+job.ID+"/mark-sent-manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", job.ID)
+	rec := httptest.NewRecorder()
+	ws.handleAppMarkSentManual(rec, req)
+	if rec.Code != http.StatusSeeOther { t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String()) }
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil { t.Fatal(err) }
+	if loc.Path != "/app/applications" || loc.Query().Get("scope") != "completed" || loc.Query().Get("manual_sent") != "1" {
+		t.Fatalf("redirect=%q", rec.Header().Get("Location"))
+	}
+	app, err := st.GetApplicationByJobID(job.ID)
+	if err != nil { t.Fatal(err) }
+	if app.State != models.ApplicationStateSent || app.SentAt == "" { t.Fatalf("application=%+v", app) }
+}
+
+func TestManualSentUIRequiresExplicitConfirmation(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil { t.Fatal(err) }
+	for _, state := range []string{models.ApplicationStateReadyEmail, models.ApplicationStateDraftCreated, models.ApplicationStateApproved} {
+		var out bytes.Buffer
+		app := &models.JobApplication{JobID: "manual-ui", State: state, Recipient: "jobs@example.com", Subject: "Application", Body: "Body", CVProfile: "general"}
+		if state != models.ApplicationStateReadyEmail { app.GmailDraftID = "draft-1" }
+		if err := tpl.Execute(&out, appPageData{
+			Title: "Application Detail", Active: "applications", CSRF: "csrf",
+			CandidateName: "Candidate", CandidateInitials: "C", SelectedApplication: app,
+			SelectedCVReady: true, GmailConnected: true,
+		}); err != nil { t.Fatal(err) }
+		html := out.String()
+		for _, want := range []string{
+			"Already sent this email manually?",
+			"action=\"/app/applications/manual-ui/mark-sent-manual\"",
+			"name=\"manual_sent_confirm\" value=\"1\" required",
+			"Mark Sent Manually",
+		} {
+			if !strings.Contains(html, want) { t.Errorf("state %s missing %q", state, want) }
+		}
+	}
+}
 func TestMatchesUIJobFilters(t *testing.T) {
 	j := &models.JobPosting{
 		Title: "Sales Executive",
