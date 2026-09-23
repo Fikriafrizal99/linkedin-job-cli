@@ -86,6 +86,8 @@ type appPageData struct {
 	LocationFilter                                 string
 	MethodFilter                                   string
 	StateFilter                                    string
+	ApplicationScope                               string
+	ApplicationStates                              []string
 	ReviewFilter                                   string
 	RunFilter                                      int64
 	Locations                                      []string
@@ -534,6 +536,32 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 	pd.LocationFilter = strings.TrimSpace(r.URL.Query().Get("location"))
 	pd.MethodFilter = strings.TrimSpace(r.URL.Query().Get("method"))
 	pd.StateFilter = strings.TrimSpace(r.URL.Query().Get("state"))
+	if strings.HasPrefix(r.URL.Path, "/app/applications") {
+		pd.ApplicationScope = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("scope")))
+		if pd.ApplicationScope == "" {
+			if isCompletedApplicationState(pd.StateFilter) {
+				pd.ApplicationScope = "completed"
+			} else {
+				pd.ApplicationScope = "active"
+			}
+		}
+		if pd.ApplicationScope != "active" && pd.ApplicationScope != "completed" {
+			pd.ApplicationScope = "active"
+			pd.ActionError = "Unknown Applications view. Showing Active applications instead."
+		}
+		if pd.ApplicationScope == "completed" {
+			pd.ApplicationStates = []string{models.ApplicationStateApplied, models.ApplicationStateSent}
+		} else {
+			pd.ApplicationStates = []string{
+				models.ApplicationStateReadyEmail,
+				models.ApplicationStateReadyEasyApply,
+				models.ApplicationStateInProgress,
+				models.ApplicationStateNeedReview,
+				models.ApplicationStateDraftCreated,
+				models.ApplicationStateApproved,
+			}
+		}
+	}
 	if strings.HasPrefix(r.URL.Path, "/app/jobs") {
 		pd.ReviewFilter = strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("review")))
 		if pd.ReviewFilter == "" {
@@ -763,7 +791,6 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		appByJobID[apps[i].JobID] = &apps[i]
 	}
 	pd.Stats.JobsTotal = len(jobs)
-	pd.Stats.PipelineTotal = len(apps)
 	for _, a := range apps {
 		switch a.State {
 		case models.ApplicationStateReadyEmail:
@@ -785,6 +812,7 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 		}
 	}
 	pd.Stats.CompletedTotal = pd.Stats.SentTotal + pd.Stats.AppliedTotal
+	pd.Stats.PipelineTotal = len(apps) - pd.Stats.CompletedTotal
 	if reasons, reasonErr := ws.st.TopJobReviewReasons(models.JobReviewSkipped, 5); reasonErr == nil {
 		for _, row := range reasons {
 			share := 0
@@ -883,8 +911,20 @@ func (ws *webServer) buildAppPage(r *http.Request) (appPageData, error) {
 			}
 		}
 	case "applications":
-		pd.Active, pd.Title, pd.Subtitle = "applications", "Applications", "Choose the next step for your email and manual LinkedIn applications."
+		pd.Active, pd.Title = "applications", "Applications"
+		if pd.ApplicationScope == "completed" {
+			pd.Subtitle = "Completed application history. LinkedIn APPLIED and email SENT records move here automatically."
+		} else {
+			pd.Subtitle = "Active application queue. Completed applications automatically leave this view."
+		}
 		for _, a := range apps {
+			completed := isCompletedApplicationState(a.State)
+			if pd.ApplicationScope == "completed" && !completed {
+				continue
+			}
+			if pd.ApplicationScope != "completed" && completed {
+				continue
+			}
 			j := jobByID[a.JobID]
 			if !matchesUIApplication(&a, j, pd.Query, pd.MethodFilter, pd.StateFilter) {
 				continue
@@ -1193,6 +1233,11 @@ func matchesUIApplication(a *models.JobApplication, j *models.JobPosting, q, met
 		}
 	}
 	return true
+}
+
+func isCompletedApplicationState(state string) bool {
+	state = strings.ToUpper(strings.TrimSpace(state))
+	return state == models.ApplicationStateApplied || state == models.ApplicationStateSent
 }
 
 func preferredApplication(apps []models.JobApplication) *models.JobApplication {
