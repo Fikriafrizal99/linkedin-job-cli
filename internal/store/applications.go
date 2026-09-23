@@ -465,6 +465,44 @@ WHERE job_id=?
 	return s.GetApplicationByJobID(jobID)
 }
 
+// MarkApplicationSentManual records that the user already sent an email
+// outside the provider-driven send flow. It does not send anything; it only
+// advances an active email application to SENT and records sent_at locally.
+func (s *Store) MarkApplicationSentManual(jobID string) (*models.JobApplication, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, fmt.Errorf("empty job id")
+	}
+	existing, err := s.GetApplicationByJobID(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("job %s is not queued for application", jobID)
+	}
+	if existing.State == models.ApplicationStateSent {
+		return existing, nil
+	}
+	switch existing.State {
+	case models.ApplicationStateReadyEmail,
+		models.ApplicationStateDraftCreated,
+		models.ApplicationStateApproved:
+	default:
+		return nil, fmt.Errorf("application state is %s; only active email applications can be marked SENT manually", existing.State)
+	}
+
+	now := NowISO()
+	if _, err := s.db.Exec(`
+UPDATE applications
+SET state=?, sent_at=?, updated_at=?, last_error=''
+WHERE job_id=?
+`,
+		models.ApplicationStateSent, now, now, jobID); err != nil {
+		return nil, err
+	}
+	return s.GetApplicationByJobID(jobID)
+}
+
 // MarkApplicationSent records the Gmail provider identifiers only after the
 // approved draft has been explicitly sent by the external provider.
 func (s *Store) MarkApplicationSent(jobID, messageID, threadID string) (*models.JobApplication, error) {
