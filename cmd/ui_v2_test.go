@@ -80,6 +80,111 @@ func TestJobsNavigationExposesPersistentViewHooks(t *testing.T) {
 	}
 }
 
+
+func TestApplicationsSeparateActiveAndCompletedScopes(t *testing.T) {
+	t.Setenv("LJ_SETTINGS_FILE", filepath.Join(t.TempDir(), "missing-settings.yaml"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "application-scopes.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	activeJob := &models.JobPosting{
+		ID: "active-1", Title: "Account Executive", Company: "Active Co",
+		URL: "https://www.linkedin.com/jobs/view/100001/", ApplicationMethod: "LINKEDIN",
+	}
+	doneJob := &models.JobPosting{
+		ID: "done-1", Title: "Business Development", Company: "Done Co",
+		URL: "https://www.linkedin.com/jobs/view/100002/", ApplicationMethod: "LINKEDIN",
+	}
+	for _, job := range []*models.JobPosting{activeJob, doneJob} {
+		if err := st.Upsert(job); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.QueueApplication(job.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.MarkEasyApplyOpened(doneJob.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.MarkEasyApplyApplied(doneJob.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	ws := &webServer{st: st, csrf: "csrf-test"}
+	activeReq := httptest.NewRequest(http.MethodGet, "/app/applications", nil)
+	active, err := ws.buildAppPage(activeReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.ApplicationScope != "active" {
+		t.Fatalf("active scope=%q", active.ApplicationScope)
+	}
+	if len(active.Applications) != 1 || active.Applications[0].JobID != activeJob.ID {
+		t.Fatalf("active applications=%+v", active.Applications)
+	}
+	if active.Stats.PipelineTotal != 1 || active.Stats.CompletedTotal != 1 {
+		t.Fatalf("stats active=%d completed=%d", active.Stats.PipelineTotal, active.Stats.CompletedTotal)
+	}
+
+	doneReq := httptest.NewRequest(http.MethodGet, "/app/applications?scope=completed", nil)
+	done, err := ws.buildAppPage(doneReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.ApplicationScope != "completed" {
+		t.Fatalf("completed scope=%q", done.ApplicationScope)
+	}
+	if len(done.Applications) != 1 || done.Applications[0].JobID != doneJob.ID {
+		t.Fatalf("completed applications=%+v", done.Applications)
+	}
+}
+
+func TestCompletedApplicationsRenderAsHistoryWithoutQueueControls(t *testing.T) {
+	tpl, err := newAppTemplate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	err = tpl.Execute(&out, appPageData{
+		Title: "Applications", Active: "applications", CSRF: "csrf",
+		CandidateName: "Candidate", CandidateInitials: "C",
+		ApplicationScope: "completed",
+		ApplicationStates: []string{models.ApplicationStateApplied, models.ApplicationStateSent},
+		Stats: appStats{PipelineTotal: 2, CompletedTotal: 3, AppliedTotal: 2, SentTotal: 1},
+		Applications: []appApplicationRow{{
+			JobID: "done-1", Title: "Account Executive", Company: "Example",
+			Method: "EASY_APPLY", State: models.ApplicationStateApplied,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := out.String()
+	for _, want := range []string{
+		"Completed <span>3</span>",
+		"Applied on LinkedIn",
+		"Email sent",
+		"Completed applications are kept here as history.",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("completed applications UI missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{
+		"id=\"select-all-apps\"",
+		"Prepare Selected",
+		"Create Drafts",
+		"Review Selected",
+		"Confirm Send",
+	} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("completed applications UI should not expose %q", unwanted)
+		}
+	}
+}
+
 func TestAppTemplateApplicationDetailIsReadOnlyUntilActionWiring(t *testing.T) {
 	tpl, err := newAppTemplate()
 	if err != nil {
