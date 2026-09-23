@@ -347,7 +347,7 @@ func (ws *webServer) handleAppBulkSend(w http.ResponseWriter, r *http.Request) {
 
 func redirectBulkResult(w http.ResponseWriter, r *http.Request, action string, ok, skipped, failed int, actionErr error) {
 	q := url.Values{}
-	for _, key := range []string{"q", "method", "state", "since", "page"} {
+	for _, key := range []string{"q", "method", "state", "since", "page", "scope"} {
 		if v := strings.TrimSpace(r.PostFormValue("filter_" + key)); v != "" {
 			q.Set(key, v)
 		}
