@@ -321,17 +321,33 @@
         {{else}}
         
         {{if .SelectedApplication.Subject}}<div class="review-layout application-layout"><div><div class="form-grid"><div><div class="field-label">To</div><div class="field">{{.SelectedApplication.Recipient}}</div></div><div><div class="field-label">CV Profile</div><div class="field">{{.SelectedApplication.CVProfile}}</div></div></div>
-        <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
-        <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
+        {{if eq .SelectedApplication.State "READY_EMAIL"}}
+          <form class="email-editor" method="post" action="/app/applications/{{.SelectedApplication.JobID}}/content">
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <div class="form-group">
+              <label for="email-subject">Subject</label>
+              <input id="email-subject" name="subject" maxlength="240" required value="{{.SelectedApplication.Subject}}">
+            </div>
+            <div class="form-group">
+              <label for="email-body">Email Body</label>
+              <textarea id="email-body" name="body" maxlength="12000" rows="15" required>{{.SelectedApplication.Body}}</textarea>
+            </div>
+            <div class="detail-actions"><button class="btn primary" type="submit">Save Changes</button></div>
+          </form>
+          <div class="footer-note">Edit freely before creating the Gmail draft. Create Gmail Draft always uses the last saved subject and body.</div>
+        {{else}}
+          <div class="field-label">Subject</div><div class="field">{{.SelectedApplication.Subject}}</div>
+          <div class="field-label">Email Body</div><div class="field email-body">{{.SelectedApplication.Body}}</div>
+        {{end}}
         {{end}}{{if .SelectedApplication.GmailDraftID}}<details class="file-details"><summary>Provider &amp; review history</summary><div class="detail-grid" style="margin-top:14px"><div class="info-card"><h3>Provider</h3><div class="info-row"><span>Draft ID</span><b>{{.SelectedApplication.GmailDraftID}}</b></div><div class="info-row"><span>Message ID</span><b>{{.SelectedApplication.GmailMessageID}}</b></div><div class="info-row"><span>Thread ID</span><b>{{.SelectedApplication.GmailThreadID}}</b></div></div><div class="info-card"><h3>Review</h3><div class="info-row"><span>Reviewed</span><b>{{.SelectedApplication.ReviewedAt}}</b></div><div class="info-row"><span>Note</span><b>{{.SelectedApplication.ReviewNote}}</b></div><div class="info-row"><span>Sent</span><b>{{.SelectedApplication.SentAt}}</b></div></div></div></details>{{end}}{{if .SelectedApplication.Subject}}</div><aside>{{end}}
         {{if eq .SelectedApplication.State "READY_EMAIL"}}
-          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/prepare" style="margin-top:16px">
+          <form method="post" action="/app/applications/{{.SelectedApplication.JobID}}/prepare" style="margin-top:16px" {{if .SelectedApplication.Subject}}onsubmit="return confirm('Regenerate the default email? This will overwrite your saved subject and body with the generated version.')"{{end}}>
             <input type="hidden" name="csrf" value="{{.CSRF}}">
             <div class="form-grid">
               <div class="form-group"><label for="field-3">CV Profile</label><select id="field-3" name="cv_profile"><option value="">Auto · match by keywords</option>{{range .CVProfiles}}<option value="{{.ID}}" {{if eq $.SelectedApplication.CVProfile .ID}}selected{{end}}>{{.ID}}{{if .Default}} · default{{end}}</option>{{end}}</select></div>
-              
             </div>
-            <div class="detail-actions"><button class="btn {{if .SelectedApplication.Subject}}ghost{{else}}primary{{end}}" type="submit">{{if .SelectedApplication.Subject}}Re-prepare Application{{else}}Prepare Application{{end}}</button></div>
+            <div class="detail-actions"><button class="btn {{if .SelectedApplication.Subject}}ghost{{else}}primary{{end}}" type="submit">{{if .SelectedApplication.Subject}}Regenerate Default{{else}}Generate Default Email{{end}}</button></div>
+            {{if .SelectedApplication.Subject}}<div class="footer-note">Regenerate Default replaces any manual subject/body edits with a fresh generated version.</div>{{end}}
           </form>
           {{if and .SelectedApplication.Subject .SelectedApplication.Body .SelectedApplication.CVProfile}}
             <div class="field-label">CV Attachment</div><div class="field">{{if .SelectedCVPath}}{{base .SelectedCVPath}}{{else}}No configured CV file{{end}}</div>
