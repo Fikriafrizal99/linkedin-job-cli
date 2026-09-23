@@ -90,6 +90,7 @@ Binds to localhost only by default.`,
 		mux.HandleFunc("POST /app/applications/{id}/easy-apply/open", ws.handleAppOpenEasyApply)
 		mux.HandleFunc("POST /app/applications/{id}/easy-apply/applied", ws.handleAppMarkEasyApplyApplied)
 		mux.HandleFunc("POST /app/applications/{id}/draft", ws.handleAppCreateGmailDraft)
+		mux.HandleFunc("POST /app/applications/{id}/mark-sent-manual", ws.handleAppMarkSentManual)
 		mux.HandleFunc("POST /app/applications/{id}/recreate-draft", ws.handleAppRecreateGmailDraft)
 		mux.HandleFunc("POST /app/applications/{id}/approve", ws.handleAppApproveApplication)
 		mux.HandleFunc("POST /app/applications/{id}/unapprove", ws.handleAppUnapproveApplication)
