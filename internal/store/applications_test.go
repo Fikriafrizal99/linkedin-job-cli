@@ -384,6 +384,39 @@ CREATE TABLE applications (
 }
 
 
+func TestMarkApplicationSentManual(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-manual-sent")
+	j.ApplicationMethod = "EMAIL"
+	j.ApplyEmail = "jobs@example.com"
+	if err := st.Upsert(j); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(j.ID); err != nil { t.Fatal(err) }
+
+	got, err := st.MarkApplicationSentManual(j.ID)
+	if err != nil { t.Fatalf("MarkApplicationSentManual: %v", err) }
+	if got.State != models.ApplicationStateSent || got.SentAt == "" {
+		t.Fatalf("manual sent transition failed: %+v", got)
+	}
+	if got.GmailMessageID != "" || got.GmailThreadID != "" {
+		t.Fatalf("manual tracking must not invent provider ids: %+v", got)
+	}
+
+	again, err := st.MarkApplicationSentManual(j.ID)
+	if err != nil { t.Fatalf("idempotent manual sent: %v", err) }
+	if again.State != models.ApplicationStateSent { t.Fatalf("state=%q", again.State) }
+}
+
+func TestMarkApplicationSentManualRejectsNonEmailLifecycle(t *testing.T) {
+	st := tmpDB(t)
+	j := sampleJob("app-manual-sent-easy")
+	j.ApplicationMethod = "LINKEDIN"
+	j.URL = "https://www.linkedin.com/jobs/view/999001/"
+	if err := st.Upsert(j); err != nil { t.Fatal(err) }
+	if _, err := st.QueueApplication(j.ID); err != nil { t.Fatal(err) }
+	if _, err := st.MarkApplicationSentManual(j.ID); err == nil {
+		t.Fatal("expected Easy Apply state to reject manual email SENT transition")
+	}
+}
 func TestMarkApplicationSentRequiresApproved(t *testing.T) {
 	st := tmpDB(t)
 	j := sampleJob("app-send-gate")
