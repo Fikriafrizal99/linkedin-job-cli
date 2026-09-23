@@ -70,3 +70,10 @@ html{scroll-padding-top:90px} :focus-visible{outline:3px solid #8dc6ff;outline-o
 
 .triage-reason{grid-column:1/-1;margin:0}
 .run-scope{margin:0 0 10px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:#10243a;color:#a9bdd4;font-size:12px}
+
+.email-editor{margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:10px;background:#102338}
+.email-editor .form-group+.form-group{margin-top:12px}
+.email-editor textarea{min-height:300px;resize:vertical;white-space:pre-wrap;line-height:1.6}
+.email-editor input,.email-editor textarea{font-size:13px}
+.email-editor .detail-actions{justify-content:flex-end}
+.email-editor .detail-actions .btn{flex:0 1 auto;min-width:140px}
