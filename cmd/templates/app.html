@@ -140,7 +140,7 @@
         <input type="hidden" name="filter_location" value="{{.LocationFilter}}">
         <input type="hidden" name="filter_method" value="{{.MethodFilter}}">
         <input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_review" value="{{.ReviewFilter}}">{{if .RunFilter}}<input type="hidden" name="filter_run" value="{{.RunFilter}}">{{end}}<input type="hidden" name="filter_page" value="{{.Page}}">
-        <div class="bulk-bar">
+        {{if ne .ApplicationScope "completed"}}<div class="bulk-bar">
           <div class="bulk-primary-row">
             <div class="bulk-select">
               <label class="checkline"><input id="select-all-jobs" type="checkbox"> Select visible</label>
@@ -426,25 +426,33 @@
         {{end}}
       </div></div>
     {{else}}
+      <nav class="triage-nav" aria-label="Application views">
+        <a href="/app/applications" {{if eq .ApplicationScope "active"}}aria-current="page"{{end}}>Active <span>{{.Stats.PipelineTotal}}</span></a>
+        <a href="/app/applications?scope=completed" {{if eq .ApplicationScope "completed"}}aria-current="page"{{end}}>Completed <span>{{.Stats.CompletedTotal}}</span></a>
+      </nav>
       <div class="pipeline-strip">
-        <a class="pipeline-mini" href="/app/applications?state=READY_EMAIL" {{if eq .StateFilter "READY_EMAIL"}}aria-current="page"{{end}}><b>{{.Stats.ReadyTotal}}</b><span>Prepare email</span></a>
-        <a class="pipeline-mini" href="/app/applications?state=READY_EASY_APPLY" {{if eq .StateFilter "READY_EASY_APPLY"}}aria-current="page"{{end}}><b>{{.Stats.EasyReadyTotal}}</b><span>Ready for Easy Apply</span></a>
-        <a class="pipeline-mini" href="/app/applications?state=IN_PROGRESS" {{if eq .StateFilter "IN_PROGRESS"}}aria-current="page"{{end}}><b>{{.Stats.InProgressTotal}}</b><span>In progress</span></a>
-        <a class="pipeline-mini" href="/app/applications?state=NEED_REVIEW" {{if eq .StateFilter "NEED_REVIEW"}}aria-current="page"{{end}}><b>{{.Stats.NeedReviewTotal}}</b><span>Needs attention</span></a>
-        <a class="pipeline-mini" href="/app/applications?state=DRAFT_CREATED" {{if eq .StateFilter "DRAFT_CREATED"}}aria-current="page"{{end}}><b>{{.Stats.DraftTotal}}</b><span>Drafts to review</span></a>
-        <a class="pipeline-mini" href="/app/applications?state=APPROVED" {{if eq .StateFilter "APPROVED"}}aria-current="page"{{end}}><b>{{.Stats.ApprovedTotal}}</b><span>Awaiting send</span></a>
-        <a class="pipeline-mini" href="/app/applications?state=APPLIED" {{if eq .StateFilter "APPLIED"}}aria-current="page"{{end}}><b>{{.Stats.AppliedTotal}}</b><span>Applied on LinkedIn</span></a>
-        <a class="pipeline-mini" href="/app/applications?state=SENT" {{if eq .StateFilter "SENT"}}aria-current="page"{{end}}><b>{{.Stats.SentTotal}}</b><span>Email sent</span></a>
+        {{if eq .ApplicationScope "completed"}}
+          <a class="pipeline-mini" href="/app/applications?scope=completed&amp;state=APPLIED" {{if eq .StateFilter "APPLIED"}}aria-current="page"{{end}}><b>{{.Stats.AppliedTotal}}</b><span>Applied on LinkedIn</span></a>
+          <a class="pipeline-mini" href="/app/applications?scope=completed&amp;state=SENT" {{if eq .StateFilter "SENT"}}aria-current="page"{{end}}><b>{{.Stats.SentTotal}}</b><span>Email sent</span></a>
+        {{else}}
+          <a class="pipeline-mini" href="/app/applications?state=READY_EMAIL" {{if eq .StateFilter "READY_EMAIL"}}aria-current="page"{{end}}><b>{{.Stats.ReadyTotal}}</b><span>Prepare email</span></a>
+          <a class="pipeline-mini" href="/app/applications?state=READY_EASY_APPLY" {{if eq .StateFilter "READY_EASY_APPLY"}}aria-current="page"{{end}}><b>{{.Stats.EasyReadyTotal}}</b><span>Ready for Easy Apply</span></a>
+          <a class="pipeline-mini" href="/app/applications?state=IN_PROGRESS" {{if eq .StateFilter "IN_PROGRESS"}}aria-current="page"{{end}}><b>{{.Stats.InProgressTotal}}</b><span>In progress</span></a>
+          <a class="pipeline-mini" href="/app/applications?state=NEED_REVIEW" {{if eq .StateFilter "NEED_REVIEW"}}aria-current="page"{{end}}><b>{{.Stats.NeedReviewTotal}}</b><span>Needs attention</span></a>
+          <a class="pipeline-mini" href="/app/applications?state=DRAFT_CREATED" {{if eq .StateFilter "DRAFT_CREATED"}}aria-current="page"{{end}}><b>{{.Stats.DraftTotal}}</b><span>Drafts to review</span></a>
+          <a class="pipeline-mini" href="/app/applications?state=APPROVED" {{if eq .StateFilter "APPROVED"}}aria-current="page"{{end}}><b>{{.Stats.ApprovedTotal}}</b><span>Awaiting send</span></a>
+        {{end}}
       </div>
       <form class="toolbar" method="get" action="/app/applications">
+        <input type="hidden" name="scope" value="{{.ApplicationScope}}">
         <input class="control search" type="search" name="q" value="{{.Query}}" placeholder="Search title, company or recipient…" aria-label="Search applications">
-        <label class="filter-field">Status<select class="control" name="state"><option value="">All states</option>{{range .States}}{{if ne . "NOT_APPLIED"}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{stateLabel .}}</option>{{end}}{{end}}</select></label>
+        <label class="filter-field">Status<select class="control" name="state"><option value="">All states</option>{{range .ApplicationStates}}<option value="{{.}}" {{if eq $.StateFilter .}}selected{{end}}>{{stateLabel .}}</option>{{end}}</select></label>
         <label class="filter-field">Method<select class="control" name="method"><option value="">All methods</option>{{range .Methods}}<option value="{{.}}" {{if eq $.MethodFilter .}}selected{{end}}>{{channelLabel .}}</option>{{end}}</select></label>
-        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" href="/app/applications">Reset</a>
+        <label class="filter-field">Since date<input class="control" type="date" name="since" value="{{.SinceFilter}}" aria-label="Collected or updated since"></label><button class="btn ghost" type="submit">Apply Filters</button><a class="btn ghost" href="/app/applications{{if eq .ApplicationScope "completed"}}?scope=completed{{end}}">Reset</a>
       </form>
-      <div class="results-summary">{{.TotalRows}} applications{{if .Filtered}} match your filters · <a class="job-link" href="/app/applications">Clear all filters</a>{{end}}<span>Select records to see available actions.</span></div>
+      <div class="results-summary">{{.TotalRows}} {{if eq .ApplicationScope "completed"}}completed{{else}}active{{end}} application(s){{if .Filtered}} match your filters · <a class="job-link" href="/app/applications{{if eq .ApplicationScope "completed"}}?scope=completed{{end}}">Clear all filters</a>{{end}}<span>{{if eq .ApplicationScope "completed"}}Completed applications are kept here as history.{{else}}Select records to see available actions.{{end}}</span></div>
       <form method="post" id="bulk-app-form" data-gmail="{{.GmailConnected}}">
-<input type="hidden" name="filter_q" value="{{.Query}}"><input type="hidden" name="filter_method" value="{{.MethodFilter}}"><input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_page" value="{{.Page}}">
+<input type="hidden" name="filter_q" value="{{.Query}}"><input type="hidden" name="filter_method" value="{{.MethodFilter}}"><input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_page" value="{{.Page}}"><input type="hidden" name="filter_scope" value="{{.ApplicationScope}}">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <div class="bulk-bar">
           <div class="bulk-primary-row">
@@ -461,10 +469,10 @@
           </div>
           <div class="selection-detail" id="app-selection-detail" role="status">Select applications to see eligible actions. Sending always requires a separate confirmation.</div>
           {{if .Attachments}}<div class="bulk-attachments"><span class="batch-note">Attachments for batch draft creation:</span>{{range .Attachments}}{{if .Exists}}<label class="checkline"><input type="checkbox" name="attachment" value="{{.ID}}" {{if eq .Kind "portfolio"}}checked{{end}}> {{.Label}}</label>{{end}}{{end}}</div>{{end}}
-        </div>
+        </div>{{end}}
         <div class="content-card"><div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable records"><table><thead><tr><th style="width:42px"><span class="sr-only">Select</span></th><th>Job</th><th>Company</th><th>Method</th><th>Status</th><th>Next step</th><th>Recipient</th><th>Updated</th></tr></thead><tbody>
-        {{range .Applications}}<tr class="js-selectable-row"><td><input aria-label="Select {{.Title}} at {{.Company}}" data-state="{{.State}}" data-prepared="{{.Prepared}}" class="row-check js-app-check" type="checkbox" name="job_id" value="{{.JobID}}"></td><td class="table-title"><a class="job-link" href="{{detailURL "/app/applications/" .JobID $.ListURL}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td><span class="badge method-{{lower .Method}}">{{channelLabel .Method}}</span></td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td><td>{{if eq .State "READY_EMAIL"}}{{if .Prepared}}Create Gmail draft{{else}}Prepare email{{end}}{{else if eq .State "DRAFT_CREATED"}}Review in Gmail{{else if eq .State "APPROVED"}}Confirm send{{else if eq .State "READY_EASY_APPLY"}}Open LinkedIn{{else if eq .State "IN_PROGRESS"}}Submit manually &amp; confirm{{else if eq .State "NEED_REVIEW"}}Check job destination{{else}}Complete{{end}}</td><td class="muted">{{.Recipient}}</td><td class="muted">{{.Updated}}</td></tr>{{end}}
-        </tbody></table></div>{{if not .Applications}}<div class="empty">{{if .Filtered}}No applications match these filters. <a class="job-link" href="/app/applications">Clear filters</a>{{else}}Your application queue is empty. <a class="job-link" href="/app/jobs">Select jobs to get started →</a>{{end}}</div>{{end}}</div>
+        {{range .Applications}}<tr class="js-selectable-row"><td>{{if eq $.ApplicationScope "completed"}}<span class="muted" title="Completed">✓</span>{{else}}<input aria-label="Select {{.Title}} at {{.Company}}" data-state="{{.State}}" data-prepared="{{.Prepared}}" class="row-check js-app-check" type="checkbox" name="job_id" value="{{.JobID}}">{{end}}</td><td class="table-title"><a class="job-link" href="{{detailURL "/app/applications/" .JobID $.ListURL}}">{{.Title}}</a></td><td class="table-company">{{.Company}}</td><td><span class="badge method-{{lower .Method}}">{{channelLabel .Method}}</span></td><td><span title="{{.State}}" class="badge state-{{lower .State}}">{{stateLabel .State}}</span></td><td>{{if eq .State "READY_EMAIL"}}{{if .Prepared}}Create Gmail draft{{else}}Prepare email{{end}}{{else if eq .State "DRAFT_CREATED"}}Review in Gmail{{else if eq .State "APPROVED"}}Confirm send{{else if eq .State "READY_EASY_APPLY"}}Open LinkedIn{{else if eq .State "IN_PROGRESS"}}Submit manually &amp; confirm{{else if eq .State "NEED_REVIEW"}}Check job destination{{else}}Complete{{end}}</td><td class="muted">{{.Recipient}}</td><td class="muted">{{.Updated}}</td></tr>{{end}}
+        </tbody></table></div>{{if not .Applications}}<div class="empty">{{if .Filtered}}No applications match these filters. <a class="job-link" href="/app/applications{{if eq .ApplicationScope "completed"}}?scope=completed{{end}}">Clear filters</a>{{else if eq .ApplicationScope "completed"}}No completed applications yet. APPLIED and SENT records will appear here automatically.{{else}}Your active application queue is empty. <a class="job-link" href="/app/jobs">Select jobs to get started →</a>{{end}}</div>{{end}}</div>
       </form>
 <nav class="pagination" aria-label="Results pages"><span>Showing {{.FirstRow}}–{{.LastRow}} of {{.TotalRows}} · 50 per page</span>{{if .PrevPageURL}}<a class="btn ghost" href="{{.PrevPageURL}}">← Previous page</a>{{end}}{{if .NextPageURL}}<a class="btn ghost" href="{{.NextPageURL}}">Next page →</a>{{end}}</nav>
     {{end}}
