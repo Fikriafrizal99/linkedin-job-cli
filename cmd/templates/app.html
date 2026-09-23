@@ -140,7 +140,7 @@
         <input type="hidden" name="filter_location" value="{{.LocationFilter}}">
         <input type="hidden" name="filter_method" value="{{.MethodFilter}}">
         <input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_review" value="{{.ReviewFilter}}">{{if .RunFilter}}<input type="hidden" name="filter_run" value="{{.RunFilter}}">{{end}}<input type="hidden" name="filter_page" value="{{.Page}}">
-        {{if ne .ApplicationScope "completed"}}<div class="bulk-bar">
+        <div class="bulk-bar">
           <div class="bulk-primary-row">
             <div class="bulk-select">
               <label class="checkline"><input id="select-all-jobs" type="checkbox"> Select visible</label>
@@ -454,7 +454,7 @@
       <form method="post" id="bulk-app-form" data-gmail="{{.GmailConnected}}">
 <input type="hidden" name="filter_q" value="{{.Query}}"><input type="hidden" name="filter_method" value="{{.MethodFilter}}"><input type="hidden" name="filter_state" value="{{.StateFilter}}"><input type="hidden" name="filter_since" value="{{.SinceFilter}}"><input type="hidden" name="filter_page" value="{{.Page}}"><input type="hidden" name="filter_scope" value="{{.ApplicationScope}}">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
-        <div class="bulk-bar">
+        {{if ne .ApplicationScope "completed"}}<div class="bulk-bar">
           <div class="bulk-primary-row">
             <div class="bulk-select"><label class="checkline"><input id="select-all-apps" type="checkbox"> Select all visible</label><span id="selected-count" class="batch-note" role="status">0 selected</span></div>
             <div class="bulk-actions">
